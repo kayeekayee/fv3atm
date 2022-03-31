@@ -45,7 +45,7 @@ module GFS_typedefs
       integer :: ntrcaer
 
       ! If these are changed to >99, need to adjust formatting string in GFS_diagnostics.F90 (and names in diag_tables)
-      integer, parameter :: naux2dmax = 20 !< maximum number of auxiliary 2d arrays in output (for debugging)
+      integer, parameter :: naux2dmax = 30 !< maximum number of auxiliary 2d arrays in output (for debugging)
       integer, parameter :: naux3dmax = 20 !< maximum number of auxiliary 3d arrays in output (for debugging)
 
       integer, parameter :: dfi_radar_max_intervals = 4 !< Number of radar-derived temperature tendency and/or convection suppression intervals. Do not change.
@@ -390,6 +390,8 @@ module GFS_typedefs
     real (kind=kind_phys), pointer :: tsnow_ice(:)       => null()  !< RUC LSM: snow temperature at the bottom of the first snow layer over ice
     real (kind=kind_phys), pointer :: snowfallac_land(:) => null()  !< ruc lsm diagnostics over land
     real (kind=kind_phys), pointer :: snowfallac_ice(:)  => null()  !< ruc lsm diagnostics over ice
+    real (kind=kind_phys), pointer :: acsnow_land(:)     => null()  !< ruc lsm diagnostics over land
+    real (kind=kind_phys), pointer :: acsnow_ice(:)      => null()  !< ruc lsm diagnostics over ice
 
     !  MYNN surface layer
     real (kind=kind_phys), pointer :: ustm (:)         => null()  !u* including drag
@@ -1582,15 +1584,21 @@ module GFS_typedefs
                                                !        %upfx0    - clear sky upward lw flux at toa (w/m**2)
 
 ! Input/output - used by physics
-    real (kind=kind_phys), pointer :: srunoff(:)     => null()   !< surface water runoff (from lsm)
-    real (kind=kind_phys), pointer :: evbsa  (:)     => null()   !< noah lsm diagnostics
-    real (kind=kind_phys), pointer :: evcwa  (:)     => null()   !< noah lsm diagnostics
-    real (kind=kind_phys), pointer :: snohfa (:)     => null()   !< noah lsm diagnostics
+    real (kind=kind_phys), pointer :: srunoff(:)     => null()   !< accumulated surface storm runoff (from lsm)
+    real (kind=kind_phys), pointer :: evbsa  (:)     => null()   !< accumulated direct evaporation
+    real (kind=kind_phys), pointer :: evcwa  (:)     => null()   !< accumulated canopy evaporation
+    real (kind=kind_phys), pointer :: snohfa (:)     => null()   !< heat flux for phase change of snow (melting)
+    real (kind=kind_phys), pointer :: transa (:)     => null()   !< accumulated transpiration
+    real (kind=kind_phys), pointer :: sbsnoa (:)     => null()   !< accumulated snow sublimation
+    real (kind=kind_phys), pointer :: snowca (:)     => null()   !< snow cover
+    real (kind=kind_phys), pointer :: sbsno  (:)     => null()   !< instantaneous snow sublimation
+    real (kind=kind_phys), pointer :: evbs(:)        => null()   !< instantaneous direct evaporation
+    real (kind=kind_phys), pointer :: trans  (:)     => null()   !< instantaneous transpiration
+    real (kind=kind_phys), pointer :: evcw(:)        => null()   !< instantaneous canopy evaporation
+    real (kind=kind_phys), pointer :: snowmt_land(:) => null()   !< ruc lsm diagnostics over land
+    real (kind=kind_phys), pointer :: snowmt_ice(:)  => null()   !< ruc lsm diagnostics over ice
+    real (kind=kind_phys), pointer :: soilm  (:)     => null()   !< integrated soil moisture
     real (kind=kind_phys), pointer :: paha   (:)     => null()   !< noah lsm diagnostics
-    real (kind=kind_phys), pointer :: transa (:)     => null()   !< noah lsm diagnostics
-    real (kind=kind_phys), pointer :: sbsnoa (:)     => null()   !< noah lsm diagnostics
-    real (kind=kind_phys), pointer :: snowca (:)     => null()   !< noah lsm diagnostics
-    real (kind=kind_phys), pointer :: soilm  (:)     => null()   !< soil moisture
     real (kind=kind_phys), pointer :: tmpmin (:)     => null()   !< min temperature at 2m height (k)
     real (kind=kind_phys), pointer :: tmpmax (:)     => null()   !< max temperature at 2m height (k)
     real (kind=kind_phys), pointer :: dusfc  (:)     => null()   !< u component of surface stress
@@ -1928,8 +1936,6 @@ module GFS_typedefs
     real (kind=kind_phys), pointer      :: evap_ice(:)        => null()  !<
     real (kind=kind_phys), pointer      :: evap_land(:)       => null()  !<
     real (kind=kind_phys), pointer      :: evap_water(:)      => null()  !<
-    real (kind=kind_phys), pointer      :: evbs(:)            => null()  !<
-    real (kind=kind_phys), pointer      :: evcw(:)            => null()  !<
     real (kind=kind_phys), pointer      :: pah(:)             => null()  !<
     real (kind=kind_phys), pointer      :: ecan(:)            => null()  !<
     real (kind=kind_phys), pointer      :: etran(:)           => null()  !<
@@ -2072,7 +2078,6 @@ module GFS_typedefs
     real (kind=kind_phys), pointer      :: save_tcp(:,:)      => null()  !<
     real (kind=kind_phys), pointer      :: save_u(:,:)        => null()  !<
     real (kind=kind_phys), pointer      :: save_v(:,:)        => null()  !<
-    real (kind=kind_phys), pointer      :: sbsno(:)           => null()  !<
     type (cmpfsw_type),    pointer      :: scmpsw(:)          => null()  !<
     real (kind=kind_phys), pointer      :: sfcalb(:,:)        => null()  !<
     real (kind=kind_phys), pointer      :: sigma(:)           => null()  !<
@@ -2099,7 +2104,6 @@ module GFS_typedefs
     integer                             :: tracers_total                 !<
     integer                             :: tracers_water                 !<
     logical                             :: trans_aero                    !<
-    real (kind=kind_phys), pointer      :: trans(:)           => null()  !<
     real (kind=kind_phys), pointer      :: tseal(:)           => null()  !<
     real (kind=kind_phys), pointer      :: tsfa(:)            => null()  !<
     real (kind=kind_phys), pointer      :: tsfc_water(:)      => null()  !<
@@ -2698,6 +2702,8 @@ module GFS_typedefs
        allocate (Sfcprop%tsnow_ice       (IM))
        allocate (Sfcprop%snowfallac_land (IM))
        allocate (Sfcprop%snowfallac_ice  (IM))
+       allocate (Sfcprop%acsnow_land     (IM))
+       allocate (Sfcprop%acsnow_ice      (IM))
        !
        Sfcprop%wetness         = clear_val
        Sfcprop%sh2o            = clear_val
@@ -2714,6 +2720,8 @@ module GFS_typedefs
        Sfcprop%tsnow_ice       = clear_val
        Sfcprop%snowfallac_land = clear_val
        Sfcprop%snowfallac_ice  = clear_val
+       Sfcprop%acsnow_land     = clear_val
+       Sfcprop%acsnow_ice      = clear_val
        !
        if (Model%rdlai) then
           allocate (Sfcprop%xlaixy (IM))
@@ -6617,11 +6625,17 @@ module GFS_typedefs
 !--- In/Out
     allocate (Diag%srunoff (IM))
     allocate (Diag%evbsa   (IM))
-    allocate (Diag%evcwa   (IM))
     allocate (Diag%snohfa  (IM))
+    allocate (Diag%evcwa   (IM))
     allocate (Diag%transa  (IM))
     allocate (Diag%sbsnoa  (IM))
     allocate (Diag%snowca  (IM))
+    allocate (Diag%evbs    (IM))
+    allocate (Diag%evcw    (IM))
+    allocate (Diag%sbsno   (IM))
+    allocate (Diag%trans   (IM))
+    allocate (Diag%snowmt_land (IM))
+    allocate (Diag%snowmt_ice  (IM))
     allocate (Diag%soilm   (IM))
     allocate (Diag%tmpmin  (IM))
     allocate (Diag%tmpmax  (IM))
@@ -6915,8 +6929,14 @@ module GFS_typedefs
     Diag%evcwa      = zero
     Diag%snohfa     = zero
     Diag%transa     = zero
-    Diag%sbsnoa     = zero
     Diag%snowca     = zero
+    Diag%sbsnoa     = zero
+    Diag%sbsno      = zero
+    Diag%evbs       = zero
+    Diag%evcw       = zero
+    Diag%trans      = zero
+    Diag%snowmt_land= zero
+    Diag%snowmt_ice = zero 
     Diag%soilm      = zero
     Diag%tmpmin     = Model%huge
     Diag%tmpmax     = zero
@@ -7225,8 +7245,6 @@ module GFS_typedefs
     allocate (Interstitial%evap_ice        (IM))
     allocate (Interstitial%evap_land       (IM))
     allocate (Interstitial%evap_water      (IM))
-    allocate (Interstitial%evbs            (IM))
-    allocate (Interstitial%evcw            (IM))
     allocate (Interstitial%pah             (IM))
     allocate (Interstitial%ecan            (IM))
     allocate (Interstitial%etran           (IM))
@@ -7319,7 +7337,6 @@ module GFS_typedefs
     allocate (Interstitial%save_tcp        (IM,Model%levs))
     allocate (Interstitial%save_u          (IM,Model%levs))
     allocate (Interstitial%save_v          (IM,Model%levs))
-    allocate (Interstitial%sbsno           (IM))
     allocate (Interstitial%scmpsw          (IM))
     allocate (Interstitial%sfcalb          (IM,NF_ALBD))
     allocate (Interstitial%sigma           (IM))
@@ -7339,7 +7356,6 @@ module GFS_typedefs
     allocate (Interstitial%tprcp_ice       (IM))
     allocate (Interstitial%tprcp_land      (IM))
     allocate (Interstitial%tprcp_water     (IM))
-    allocate (Interstitial%trans           (IM))
     allocate (Interstitial%tseal           (IM))
     allocate (Interstitial%tsfa            (IM))
     allocate (Interstitial%tsfc_water      (IM))
@@ -7933,8 +7949,6 @@ module GFS_typedefs
     Interstitial%evap_ice        = Model%huge
     Interstitial%evap_land       = Model%huge
     Interstitial%evap_water      = Model%huge
-    Interstitial%evbs            = clear_val
-    Interstitial%evcw            = clear_val
     Interstitial%pah             = clear_val
     Interstitial%ecan            = clear_val
     Interstitial%etran           = clear_val
@@ -8013,7 +8027,6 @@ module GFS_typedefs
     Interstitial%save_tcp        = clear_val
     Interstitial%save_u          = clear_val
     Interstitial%save_v          = clear_val
-    Interstitial%sbsno           = clear_val
     Interstitial%sigma           = clear_val
     Interstitial%sigmaf          = clear_val
     Interstitial%sigmafrac       = clear_val
@@ -8029,7 +8042,6 @@ module GFS_typedefs
     Interstitial%tprcp_ice       = Model%huge
     Interstitial%tprcp_land      = Model%huge
     Interstitial%tprcp_water     = Model%huge
-    Interstitial%trans           = clear_val
     Interstitial%tseal           = clear_val
     Interstitial%tsfc_water      = Model%huge
     Interstitial%tsurf_ice       = Model%huge
