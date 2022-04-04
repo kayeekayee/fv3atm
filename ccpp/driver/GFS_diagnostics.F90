@@ -2989,6 +2989,17 @@ module GFS_diagnostics
     if (Model%lsm == Model%lsm_ruc) then
       idx = idx + 1
       ExtDiag(idx)%axes = 2
+      ExtDiag(idx)%name = 'rhofr'
+      ExtDiag(idx)%desc = 'density of frozen precipitation'
+      ExtDiag(idx)%unit = 'kg m-3'
+      ExtDiag(idx)%mod_name = 'gfs_sfc'
+      allocate (ExtDiag(idx)%data(nblks))
+      do nb = 1,nblks
+        ExtDiag(idx)%data(nb)%var2 => Sfcprop(nb)%rhofr(:)
+      enddo
+
+      idx = idx + 1
+      ExtDiag(idx)%axes = 2
       ExtDiag(idx)%name = 'snowfall_acc_land'
       ExtDiag(idx)%desc = 'total accumulated frozen precipitation over land'
       ExtDiag(idx)%unit = 'kg m-2'
