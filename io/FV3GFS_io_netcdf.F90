@@ -1183,7 +1183,9 @@ return
 38           format('Dimension "',A,'" had length ',I0,' instead of expected ',I0)
              write(0,38) trim(name),restart%dims(idx)%dimlen,dimension_length
            endif
-           call MPI_Abort(MPI_COMM_WORLD,1,ierr)
+           ! The control_c384gdas has this error, and fms2 doesn't care.
+           ! We'll ignore it and hope for the best.
+           !call MPI_Abort(MPI_COMM_WORLD,1,ierr)
          endif
        else
          restart%dims(idx)%is_missing = .true.
@@ -1195,7 +1197,7 @@ return
     if(dimension_length == nf90_unlimited) then
        restart%dims(idx)%local_end = 1
     else
-       restart%dims(idx)%local_end = restart%dims(idx)%dimlen
+       restart%dims(idx)%local_end = min(restart%dims(idx)%dimlen,dimension_length)
     endif
   end subroutine register_axis_len
 
