@@ -17,7 +17,7 @@ module FV3GFS_io_netCDF_mod
   integer, parameter, public :: GFS_io_invalid_id = -1
   integer, parameter, public :: GFS_io_max_var_attr = 5
 
-  logical, parameter :: super_verbose = .true.
+  logical, parameter :: super_verbose = .false.
 
   type, public :: GFS_io_att_type
      character(:), pointer :: name, value
@@ -29,6 +29,7 @@ module FV3GFS_io_netCDF_mod
      integer :: dimlen ! Dimension length
      integer :: local_start ! start of data within this rank
      integer :: local_end ! end of data within this rank
+     logical :: is_missing ! tried to register_axis for a variable not in the netcdf file (open for read)
   end type GFS_io_dim_type
 
   type, public :: GFS_io_var_type
@@ -44,10 +45,10 @@ module FV3GFS_io_netCDF_mod
 
      ! Data storage for read/write of this variable
      real(kind_phys), pointer :: phys1(:),   phys2(:,:), phys3(:,:,:)
-     real,            pointer :: real1(:),   real2(:,:), real3(:,:,:)
+!     real,            pointer :: real1(:),   real2(:,:), real3(:,:,:)
      integer,         pointer ::  int1(:),    int2(:,:),  int3(:,:,:)
 
-     logical :: is_optional, write_data_called
+     logical :: is_optional, write_data_called, is_missing
   end type GFS_io_var_type
 
   type, public :: GFS_io_netCDF_type
@@ -62,7 +63,7 @@ module FV3GFS_io_netCDF_mod
      ! atmosphere_mod decomposition information using atmos_mod naming
      integer :: nx, ny ! local dimensions
      integer :: cnx, cny ! tile dimensions
-     integer :: tile_num, isc, iec, jsc, jec, kt
+     integer :: tile_num, isc, iec, jsc, jec
 
      ! nf90_create or nf90_open information
      integer :: ncid
@@ -88,9 +89,9 @@ module FV3GFS_io_netCDF_mod
      module procedure register_restart_field_phys1
      module procedure register_restart_field_phys2
      module procedure register_restart_field_phys3
-     module procedure register_restart_field_real1
-     module procedure register_restart_field_real2
-     module procedure register_restart_field_real3
+     ! module procedure register_restart_field_real1
+     ! module procedure register_restart_field_real2
+     ! module procedure register_restart_field_real3
   end interface register_restart_field
 
   public :: register_axis
@@ -103,16 +104,84 @@ module FV3GFS_io_netCDF_mod
   interface write_data
      module procedure write_data_int
      module procedure write_data_int_scalar
-     module procedure write_data_real
+!     module procedure write_data_real
      module procedure write_data_phys
   end interface write_data
 
 contains ! ------------------------------------------------------------
 
+  subroutine domain_offsets(restart,domain)
+    ! Modified from fms_netcdf_domain_io_mod
+    use mpp_domains_mod,    only: domain2d, mpp_get_ntile_count, mpp_get_global_domain, &
+         mpp_get_current_ntile, mpp_get_io_domain, mpp_get_data_domain,  &
+         mpp_get_compute_domain
+    implicit none
+
+    type(GFS_io_netCDF_type), intent(inout) :: restart
+    type(domain2d), intent(in) :: domain
+
+    type(domain2d), pointer :: io_domain
+
+    integer :: xmax, xpos, ymax, ypos
+    integer :: isd, xd_size
+    integer :: jsd, yd_size
+    integer :: isc, iec, xc_size
+    integer :: jsc, jec, yc_size
+
+    io_domain => mpp_get_io_domain(domain)
+
+    call mpp_get_global_domain(domain, xend=xmax, position=xpos)
+    call mpp_get_global_domain(domain, yend=ymax, position=ypos)
+
+    if(super_verbose) then
+11    format('mpp_get_global_domain xmax=',I0,' ymax=',I0,' xpos=',I0,' ypos=',I0)
+      print 11, xmax, ymax, xpos, ypos
+    endif
+
+    call mpp_get_data_domain(io_domain, xbegin=isd, xsize=xd_size, position=xpos)
+    call mpp_get_data_domain(io_domain, ybegin=jsd, ysize=yd_size, position=ypos)
+
+    if(super_verbose) then
+22    format('mpp_get_data_domain isd=',I0,' xd_size=',I0,' xpos=',I0)
+33    format('mpp_get_data_domain jsd=',I0,' yd_size=',I0,' ypos=',I0)
+      
+      print 22,isd,xd_size,xpos
+      print 33,jsd,yd_size,ypos
+    endif
+
+    call mpp_get_compute_domain(io_domain, xbegin=isc, xend=iec, xsize=xc_size, &
+         position=xpos)
+
+    if(super_verbose) then
+44    format('mpp_get_compute_domain isc=',I0,' iec=',I0,' xc_size=',I0,' xpos=',I0)
+      print 44,isc,iec,xc_size,xpos
+    endif
+
+    call mpp_get_compute_domain(io_domain, ybegin=jsc, yend=jec, ysize=yc_size, &
+         position=ypos)
+
+    if(super_verbose) then
+55    format('mpp_get_compute_domain jsc=',I0,' jec=',I0,' yc_size=',I0,' ypos=',I0)
+      print 55,jsc,jec,yc_size,ypos
+    endif
+
+    restart%cnx=xmax
+    restart%cny=ymax
+    restart%nx=xc_size
+    restart%ny=yc_size
+    restart%isc=isc
+    restart%iec=iec
+    restart%jsc=jsc
+    restart%jec=jec
+
+  end subroutine domain_offsets
+
+  ! --------------------------------------------------------------------
+
   logical function open_file(restart,infile,mode,domain,is_restart,dont_add_res_to_filename)
-    use mpp_domains_mod,    only: domain2d, mpp_get_ntile_count
+    use mpp_domains_mod,    only: domain2d, mpp_get_ntile_count, mpp_get_global_domain, mpp_get_current_ntile, mpp_get_io_domain
     use module_fv3_config,  only: fcst_mpi_comm
-    use atmosphere_mod,     only: atmosphere_resolution, atmosphere_control_data
+    use atmosphere_mod,     only: Atm, mygrid
     use mpi
     use netcdf
 
@@ -124,13 +193,22 @@ contains ! ------------------------------------------------------------
     logical, optional, intent(in) :: is_restart, dont_add_res_to_filename
 
     character(len=:), pointer :: fullname
-    integer :: need, info, ierr, ncerr, ntiles, idot ! FIXME: GET COMM
+    integer :: need, info, ierr, ncerr, idot ! FIXME: GET COMM
+
+    integer :: rank_in_fcst, fcst_comm_size
+
+    type(domain2d), pointer :: io_domain
+
+    ! integer :: m_xbegin, m_xend, m_ybegin, m_yend, m_xsize, m_xmax_size, m_ysize, m_ymax_size, m_tile_count, m_position
+    ! logical :: m_x_is_global, m_y_is_global
+    ! integer :: mpp_tile_guess
 
     open_file=.true.
 
     ! Get basic communication information
     restart%comm = fcst_mpi_comm
-    call MPI_Comm_rank(restart%comm,restart%rank,ierr)
+    call MPI_Comm_rank(fcst_mpi_comm,rank_in_fcst,ierr)
+    call MPI_Comm_size(fcst_mpi_comm,fcst_comm_size,ierr)
 
     ! Sanity checks
     if(mode/='read' .and. mode/='overwrite') then
@@ -162,42 +240,87 @@ contains ! ------------------------------------------------------------
 
     ! Get tile count from mpp_domains_mod
     restart%ntiles = mpp_get_ntile_count(domain)
+    !restart%tile_num = mpp_get_current_ntile(domain)
+    !restart%tile_num = Atm(mygrid)%tile_of_mosaic
+
+    !===============================================================================
+    !
+    ! NOTE: The following line assumes ranks are evenly distributed among the tiles. 
+    ! If that should ever change, this line must be updated.
+    !
+    restart%tile_num = 1 + rank_in_fcst*restart%ntiles/fcst_comm_size
+    !
+    !===============================================================================
+
+    call MPI_Comm_split(fcst_mpi_comm,restart%tile_num,rank_in_fcst,restart%comm,ierr)
+    call MPI_Comm_rank(restart%comm,restart%rank,ierr)
+
+    call domain_offsets(restart,domain)
 
     ! Get decomposition information from atmos_mod
-    call atmosphere_resolution(restart%nx, restart%ny, global=.false.)
-    call atmosphere_resolution(restart%cnx, restart%cny, global=.true.)
-    call atmosphere_control_data(restart%isc,restart%iec,restart%jsc,restart%jec, &
-         restart%kt, tile_num=restart%tile_num)
+    !call atmosphere_resolution(restart%nx, restart%ny, global=.false.)
+    !call atmosphere_resolution(restart%cnx, restart%cny, global=.true.)
+    ! call atmosphere_control_data(restart%isc,restart%iec,restart%jsc,restart%jec, &
+    !      restart%kt) !, tile_num=restart%tile_num)
+
+    !call mpp_get_global_domain(domain,m_xbegin, m_xend, m_xsize, m_ybegin, m_yend, m_ysize)
+    !call mpp_get_data_domain(domain,m_xbegin, m_xend, m_ybegin, m_yend, m_xsize, m_xmax_size, m_ysize, m_ymax_size, m_x_is_global, m_y_is_global, m_tile_count, m_position)
+
+!     if(restart%rank==0) then
+! 41    format('Tile ',I0,' rank ',I0,' isc=',I0,' iec=',I0,' jsc=',I0,' jec=',I0)
+! 42    format('   nx=',I0,' ny=',I0,' cnx=',I0,' cny=',I0,' ntiles=',I0,' tile_num=',I0)
+!       print 41,restart%tile_num,restart%rank,restart%isc,restart%iec,restart%jsc,restart%jec
+!       print 42,restart%nx,restart%ny,restart%cnx,restart%cny,restart%ntiles,restart%tile_num
+
+!       print '(A,I0)', 'mpp_get_current_ntile says ',mpp_tile_guess
+
+!       print '(A)','  mpp_get_global_domains says:'
+
+! 44    format('   tile_count=',I0,' position=',I0,' x_is_global=',L1,' y_is_global=',L1)
+! 441   format('   position=',I0)
+! 45    format('   xbegin=',I0,' xend=',I0,' ybegin=',I0,' yend=',I0)
+! 46    format('   xsize=',I0,' ysize=',I0,' xmax_size=',I0,' ymax_size=',I0)
+! 461   format('   xsize=',I0,' ysize=',I0)
+! !      print 441,m_position
+!       print 45,m_xbegin,m_xend,m_ybegin,m_yend
+!       print 461,m_xsize,m_ysize
+    ! endif
 
     ! Construct the filename, adding .tileN if needed:
     idot=index(infile,'.',.true.)
     need=len_trim(infile)+len('.tile999.nc') ! longest string we may need
     allocate(character(len=need) :: fullname)
-    if(ntiles>1) then
-       if(idot==0) then
-          ! Need to add .nc extension
-91        format(A,".tile",I0,".nc")
-          write(fullname,91) trim(infile),restart%tile_num
-       else
+9   format('ntiles = ',I0,' tile_num = ',I0)
+    if(restart%rank==0) then
+      print 9,restart%ntiles,restart%tile_num
+    endif
+    if(restart%ntiles>1) then
+      if(idot==0) then
+        ! Need to add .nc extension
+91      format(A,".tile",I0,".nc")
+        write(fullname,91) trim(infile),restart%tile_num
+      else
           ! Has extension
-92        format(A,".tile",I0,A)
-       write(fullname,92) infile(1:idot-1),restart%tile_num,infile(idot:len_trim(infile))
+92      format(A,".tile",I0,A)
+        write(fullname,92) infile(1:idot-1),restart%tile_num,infile(idot:len_trim(infile))
+      endif
     else
-       fullname=infile
+      fullname=infile
     endif
 
     if(super_verbose) then
-104    format('Open file "',A,'"')
-       if(restart%rank==0) then
-          write(0,104) trim(fullname) 
+104   format('Open file "',A,'"')
+      if(restart%rank==0) then
+        print 104,trim(fullname) 
+      endif
     endif
 
     ! Open the file. We'll temporarily need an MPI_Info for this.
     call MPI_Info_create(info,ierr)
-16     format(A,": ",A," tile ",I0)
+16  format(A,": ",A," tile ",I0)
     if(mode=='overwrite') then
        if(restart%rank==0) then
-          write(0,) trim(fullname),'write',restart%tile_num
+          print 16,trim(fullname),'write',restart%tile_num
        endif
        ncerr=nf90_create_par(path=trim(fullname), &
             cmode=ior(NF90_CLOBBER,NF90_NETCDF4), &
@@ -205,7 +328,7 @@ contains ! ------------------------------------------------------------
        restart%write=.true.
     else ! mode=='read'
        if(restart%rank==0) then
-          write(0,) trim(fullname),'read',restart%tile_num
+          print 16,trim(fullname),'read',restart%tile_num
        endif
        ncerr=nf90_open_par(path=trim(fullname),cmode=NF90_NOWRITE, &
             ncid=restart%ncid,comm=restart%comm,info=info)
@@ -244,12 +367,14 @@ contains ! ------------------------------------------------------------
   ! --------------------------------------------------------------------
 
   subroutine close_file(restart)
+    use mpi
     use netcdf
     implicit none
     type(GFS_io_netCDF_type), intent(inout) :: restart
-    integer :: v, a
+    integer :: v, a, ierr
     call handle_ncerr(restart,'close file',nf90_close(restart%ncid))
 
+    call MPI_comm_free(restart%comm,ierr)
     deallocate(restart%filename)
     nullify(restart%filename)
     restart%ncid=GFS_io_invalid_id
@@ -272,18 +397,18 @@ contains ! ------------------------------------------------------------
              deallocate(restart%vars(v)%phys3)
              nullify(restart%vars(v)%phys3)
           endif
-          if(associated(restart%vars(v)%real1)) then
-             deallocate(restart%vars(v)%real1)
-             nullify(restart%vars(v)%real1)
-          endif
-          if(associated(restart%vars(v)%real2)) then
-             deallocate(restart%vars(v)%real2)
-             nullify(restart%vars(v)%real2)
-          endif
-          if(associated(restart%vars(v)%real3)) then
-             deallocate(restart%vars(v)%real3)
-             nullify(restart%vars(v)%real3)
-          endif
+          ! if(associated(restart%vars(v)%real1)) then
+          !    deallocate(restart%vars(v)%real1)
+          !    nullify(restart%vars(v)%real1)
+          ! endif
+          ! if(associated(restart%vars(v)%real2)) then
+          !    deallocate(restart%vars(v)%real2)
+          !    nullify(restart%vars(v)%real2)
+          ! endif
+          ! if(associated(restart%vars(v)%real3)) then
+          !    deallocate(restart%vars(v)%real3)
+          !    nullify(restart%vars(v)%real3)
+          ! endif
           if(associated(restart%vars(v)%int1)) then
              deallocate(restart%vars(v)%int1)
              nullify(restart%vars(v)%int1)
@@ -428,15 +553,15 @@ contains ! ------------------------------------------------------------
 
   subroutine write_var(restart,var)
     use netcdf
+    use iso_c_binding, only: c_double
     implicit none
     type(GFS_io_netCDF_type), intent(inout) :: restart
     type(GFS_io_var_type), intent(inout) :: var
     integer :: start(var%ndims), count(var%ndims)
     integer :: idim, expected_size, ierr
 
-    ! write(0,'(A,A)') 'enter barrier before ',trim(var%name)
-    ! call MPI_Barrier(restart%comm,ierr)
-    ! write(0,'(A,A)') 'exit  barrier before ',trim(var%name)
+    real(c_double), allocatable :: workaround(:)
+    integer :: threeD(1,1,1), i, j, k, n
 
     if(var%write_data_called) then
        expected_size=1
@@ -466,38 +591,62 @@ contains ! ------------------------------------------------------------
        call check_size('phys3',size(var%phys3))
        call handle_ncerr(restart,'write '//trim(var%name), &
            nf90_put_var(restart%ncid,var%varid,var%phys3,start,count))
-    else if(associated(var%real1)) then
-       call check_size('real1',size(var%real1))
-       call handle_ncerr(restart,'write '//trim(var%name), &
-           nf90_put_var(restart%ncid,var%varid,var%real1,start,count))
-    else if(associated(var%real2)) then
-       call check_size('real2',size(var%real2))
-       call handle_ncerr(restart,'write '//trim(var%name), &
-           nf90_put_var(restart%ncid,var%varid,var%real2,start,count))
-    else if(associated(var%real3)) then
-       call check_size('real3',size(var%real3))
-       call handle_ncerr(restart,'write '//trim(var%name), &
-           nf90_put_var(restart%ncid,var%varid,var%real3,start,count))
+    ! else if(associated(var%real1)) then
+    !    call check_size('real1',size(var%real1))
+    !    call handle_ncerr(restart,'write '//trim(var%name), &
+    !        nf90_put_var(restart%ncid,var%varid,var%real1,start,count))
+    ! else if(associated(var%real2)) then
+    !    call check_size('real2',size(var%real2))
+    !    call handle_ncerr(restart,'write '//trim(var%name), &
+    !        nf90_put_var(restart%ncid,var%varid,var%real2,start,count))
+    ! else if(associated(var%real3)) then
+    !    call check_size('real3',size(var%real3))
+    !    call handle_ncerr(restart,'write '//trim(var%name), &
+    !        nf90_put_var(restart%ncid,var%varid,var%real3,start,count))
     else if(associated(var%int1)) then
        call check_size('int1',size(var%int1))
+       allocate(workaround(size(var%int1)))
+       n=1
+       do i=start(1),start(1)+count(1)-1
+          workaround(n)=var%int1(i)
+          n=n+1
+       enddo
        call handle_ncerr(restart,'write '//trim(var%name), &
-           nf90_put_var(restart%ncid,var%varid,var%int1,start,count))
+           nf90_put_var(restart%ncid,var%varid,workaround,start,count))
+       deallocate(workaround)
     else if(associated(var%int2)) then
        call check_size('int2',size(var%int2))
+       allocate(workaround(size(var%int2)))
+       n=1
+       do j=start(2),start(2)+count(2)-1
+          do i=start(1),start(1)+count(1)-1
+             workaround(n)=var%int2(i,j)
+             n=n+1
+          enddo
+       enddo
        call handle_ncerr(restart,'write '//trim(var%name), &
-           nf90_put_var(restart%ncid,var%varid,var%int2,start,count))
+           nf90_put_var(restart%ncid,var%varid,workaround,start,count))
+       deallocate(workaround)
     else if(associated(var%int3)) then
        call check_size('int3',size(var%int3))
+       allocate(workaround(size(var%int3)))
+       n=1
+       do k=start(3),start(3)+count(3)-1
+          do j=start(2),start(2)+count(2)-1
+             do i=start(1),start(1)+count(1)-1
+                workaround(n)=var%int3(i,j,k)
+                n=n+1
+             enddo
+          enddo
+       enddo
        call handle_ncerr(restart,'write '//trim(var%name), &
-           nf90_put_var(restart%ncid,var%varid,var%int3,start,count))
-    else ! if(restart%rank==0) then
+           nf90_put_var(restart%ncid,var%varid,workaround,start,count))
+       deallocate(workaround)
+    else if(super_verbose) then
+      ! This is not an error. It happens for write_data variables.
 101    format(A,': No array provided for writing variable "',A,'"')
        write(0,101) restart%filename,trim(var%name)
     endif
-
-    ! write(0,'(A,A)') 'enter barrier after  ',trim(var%name)
-    ! call MPI_Barrier(restart%comm,ierr)
-    ! write(0,'(A,A)') 'exit  barrier after  ',trim(var%name)
 
   contains
 
@@ -537,15 +686,32 @@ contains ! ------------------------------------------------------------
 
   subroutine read_var(restart,var)
     use netcdf
+    use iso_c_binding, only: c_double
     implicit none
     type(GFS_io_netCDF_type), intent(inout) :: restart
     type(GFS_io_var_type), intent(inout) :: var
     integer :: start(var%ndims), count(var%ndims)
     integer :: idim, expected_size,ierr
+    real(c_double), allocatable :: workaround(:)
+    integer :: i,j,k,n
 
-    ! write(0,'(A,A)') 'enter barrier for ',trim(var%name)
-    ! call MPI_Barrier(restart%comm,ierr)
-    ! write(0,'(A,A)') 'exit  barrier for ',trim(var%name)
+    if(var%is_missing) then
+return
+      if(restart%rank==0) then
+18      format(A,': filling missing var "',A,'" with zeroes.')
+        print 18,trim(restart%filename),trim(var%name)
+      endif
+      if(associated(var%phys1)) var%phys1 = 0
+      if(associated(var%phys2)) var%phys2 = 0
+      if(associated(var%phys3)) var%phys3 = 0
+      ! if(associated(var%real1)) var%real1 = 0
+      ! if(associated(var%real2)) var%real2 = 0
+      ! if(associated(var%real3)) var%real3 = 0
+      if(associated(var%int1)) var%int1 = 0
+      if(associated(var%int2)) var%int2 = 0
+      if(associated(var%int3)) var%int3 = 0
+      return
+    endif
 
     if(var%write_data_called) then
        expected_size=1
@@ -575,32 +741,59 @@ contains ! ------------------------------------------------------------
        call check_size('phys3',size(var%phys3))
        call handle_ncerr(restart,'read '//trim(var%name), &
            nf90_get_var(restart%ncid,var%varid,var%phys3,start,count))
-    else if(associated(var%real1)) then
-       call check_size('real1',size(var%real1))
-       call handle_ncerr(restart,'read '//trim(var%name), &
-           nf90_get_var(restart%ncid,var%varid,var%real1,start,count))
-    else if(associated(var%real2)) then
-       call check_size('real2',size(var%real2))
-       call handle_ncerr(restart,'read '//trim(var%name), &
-           nf90_get_var(restart%ncid,var%varid,var%real2,start,count))
-    else if(associated(var%real3)) then
-       call check_size('real3',size(var%real3))
-       call handle_ncerr(restart,'read '//trim(var%name), &
-           nf90_get_var(restart%ncid,var%varid,var%real3,start,count))
+    ! else if(associated(var%real1)) then
+    !    call check_size('real1',size(var%real1))
+    !    call handle_ncerr(restart,'read '//trim(var%name), &
+    !        nf90_get_var(restart%ncid,var%varid,var%real1,start,count))
+    ! else if(associated(var%real2)) then
+    !    call check_size('real2',size(var%real2))
+    !    call handle_ncerr(restart,'read '//trim(var%name), &
+    !        nf90_get_var(restart%ncid,var%varid,var%real2,start,count))
+    ! else if(associated(var%real3)) then
+    !    call check_size('real3',size(var%real3))
+    !    call handle_ncerr(restart,'read '//trim(var%name), &
+    !        nf90_get_var(restart%ncid,var%varid,var%real3,start,count))
     else if(associated(var%int1)) then
        call check_size('int1',size(var%int1))
+       allocate(workaround(size(var%int1)))
        call handle_ncerr(restart,'read '//trim(var%name), &
-           nf90_get_var(restart%ncid,var%varid,var%int1,start,count))
+            nf90_get_var(restart%ncid,var%varid,workaround,start,count))
+       n=1
+       do i=start(1),start(1)+count(1)-1
+          var%int1(i)=workaround(n)
+          n=n+1
+       enddo
+       deallocate(workaround)
     else if(associated(var%int2)) then
        call check_size('int2',size(var%int2))
+       allocate(workaround(size(var%int2)))
        call handle_ncerr(restart,'read '//trim(var%name), &
-           nf90_get_var(restart%ncid,var%varid,var%int2,start,count))
-    else if(associated(var%int3)) then
+            nf90_get_var(restart%ncid,var%varid,workaround,start,count))
+       n=1
+       do j=start(2),start(2)+count(2)-1
+          do i=start(1),start(1)+count(1)-1
+             var%int2(i,j)=workaround(n)
+             n=n+1
+          enddo
+       enddo
+       deallocate(workaround)
+    elseif(associated(var%int3)) then
        call check_size('int3',size(var%int3))
+       allocate(workaround(size(var%int3)))
        call handle_ncerr(restart,'read '//trim(var%name), &
-           nf90_get_var(restart%ncid,var%varid,var%int3,start,count))
+            nf90_get_var(restart%ncid,var%varid,workaround,start,count))
+       n=1
+       do k=start(3),start(3)+count(3)-1
+          do j=start(2),start(2)+count(2)-1
+             do i=start(1),start(1)+count(1)-1
+                var%int3(i,j,k)=workaround(n)
+                n=n+1
+             enddo
+          enddo
+       enddo
+       deallocate(workaround)
     else if(super_verbose) then
-       ! This is expected for non-restart variables.
+       ! This is not an error. It is expected for non-restart variables.
 101    format(A,': No destination for reading variable "',A,'"')
        write(0,101) restart%filename,trim(var%name)
     endif
@@ -711,6 +904,7 @@ contains ! ------------------------------------------------------------
     restart%dims(next_dim_idx)%dimlen=0
     restart%dims(next_dim_idx)%local_start=0
     restart%dims(next_dim_idx)%local_end=0
+    restart%dims(next_dim_idx)%is_missing = .true.
   end function next_dim_idx
 
   ! --------------------------------------------------------------------
@@ -748,14 +942,15 @@ contains ! ------------------------------------------------------------
     nullify(restart%vars(next_var_idx)%phys1)
     nullify(restart%vars(next_var_idx)%phys2)
     nullify(restart%vars(next_var_idx)%phys3)
-    nullify(restart%vars(next_var_idx)%real1)
-    nullify(restart%vars(next_var_idx)%real2)
-    nullify(restart%vars(next_var_idx)%real3)
+    ! nullify(restart%vars(next_var_idx)%real1)
+    ! nullify(restart%vars(next_var_idx)%real2)
+    ! nullify(restart%vars(next_var_idx)%real3)
     nullify(restart%vars(next_var_idx)%int1)
     nullify(restart%vars(next_var_idx)%int2)
     nullify(restart%vars(next_var_idx)%int3)
     
     restart%vars(next_var_idx)%is_optional = .false.
+    restart%vars(next_var_idx)%is_missing = .false.
     restart%vars(next_var_idx)%write_data_called = .false.
   end function next_var_idx
 
@@ -827,36 +1022,36 @@ contains ! ------------------------------------------------------------
 
   ! --------------------------------------------------------------------
 
-  subroutine write_data_real(restart,name,buffer)
-    use mpi
-    use netcdf
-    implicit none
-    type(GFS_io_netCDF_type), intent(inout) :: restart
-    character(*), intent(in) :: name
-    real, intent(in) :: buffer(:)
-    integer :: idx, idim, expected_size, ierr
+!   subroutine write_data_real(restart,name,buffer)
+!     use mpi
+!     use netcdf
+!     implicit none
+!     type(GFS_io_netCDF_type), intent(inout) :: restart
+!     character(*), intent(in) :: name
+!     real, intent(in) :: buffer(:)
+!     integer :: idx, idim, expected_size, ierr
 
-    if(restart%write) then
-       idx=find_var(restart,name)
+!     if(restart%write) then
+!        idx=find_var(restart,name)
 
-       expected_size=1
-       do idim=1,restart%vars(idx)%ndims
-          expected_size = expected_size*restart%dims(restart%vars(idx)%dimindex(idim))%dimlen
-       end do
+!        expected_size=1
+!        do idim=1,restart%vars(idx)%ndims
+!           expected_size = expected_size*restart%dims(restart%vars(idx)%dimindex(idim))%dimlen
+!        end do
 
-       if(size(buffer)/=expected_size) then
-          if(restart%rank==0) then
-38           format(A,': In write_data_real, array size ',I0,' does not match expected size ',I0)
-             write(0,38) restart%filename,size(buffer),expected_size
-          endif
-          call MPI_Abort(MPI_COMM_WORLD,1,ierr)
-       endif
+!        if(size(buffer)/=expected_size) then
+!           if(restart%rank==0) then
+! 38           format(A,': In write_data_real, array size ',I0,' does not match expected size ',I0)
+!              write(0,38) restart%filename,size(buffer),expected_size
+!           endif
+!           call MPI_Abort(MPI_COMM_WORLD,1,ierr)
+!        endif
 
-       restart%vars(idx)%write_data_called=.true.
-       allocate(restart%vars(idx)%real1(size(buffer)))
-       restart%vars(idx)%real1=buffer
-    endif
-  end subroutine write_data_real
+!        restart%vars(idx)%write_data_called=.true.
+!        allocate(restart%vars(idx)%real1(size(buffer)))
+!        restart%vars(idx)%real1=buffer
+!     endif
+!   end subroutine write_data_real
 
   ! --------------------------------------------------------------------
 
@@ -902,6 +1097,12 @@ contains ! ------------------------------------------------------------
     character(len=*), intent(in) :: name, axis_name
     integer :: idx, ierr, dlen
 
+    if(find_dim(restart,name,.false.)>0) then
+19    format(A,': Axis "',A,'" defined twice.')
+      write(0,19) trim(restart%filename),trim(name)
+      call MPI_Abort(MPI_COMM_WORLD,1,ierr)
+    endif
+
     idx=next_dim_idx(restart)
 
     restart%dims(idx)%name=name
@@ -924,18 +1125,21 @@ contains ! ------------------------------------------------------------
     if(restart%write) then
        restart%dims(idx)%dimlen=dlen
     else
-       call handle_ncerr(restart,"inquire dim "//trim(name),&
-            nf90_inq_dimid(restart%ncid,trim(name),restart%dims(idx)%dimid))
-       call handle_ncerr(restart,"inquire dim len "//trim(name), &
-            nf90_inquire_dimension(restart%ncid,restart%dims(idx)%dimid,&
-            len=restart%dims(idx)%dimlen))
-       if(dlen/=restart%dims(idx)%dimlen) then
+      ierr = nf90_inq_dimid(restart%ncid,trim(name),restart%dims(idx)%dimid)
+      if(ierr==NF90_NOERR) then
+        call handle_ncerr(restart,"inquire dim len "//trim(name), &
+             nf90_inquire_dimension(restart%ncid,restart%dims(idx)%dimid,&
+             len=restart%dims(idx)%dimlen))
+        if(dlen/=restart%dims(idx)%dimlen) then
           if(restart%rank==0) then
-38           format('Dimension "',A,'" for axis "',A,'" had length ',I0,' instead of expected ',I0)
-             write(0,38) trim(name),trim(axis_name),restart%dims(idx)%dimlen,dlen
+38          format('Dimension "',A,'" for axis "',A,'" had length ',I0,' instead of expected ',I0)
+            write(0,38) trim(name),trim(axis_name),restart%dims(idx)%dimlen,dlen
           endif
           call MPI_Abort(MPI_COMM_WORLD,1,ierr)
-       endif
+        endif
+      else
+        restart%dims(idx)%is_missing = .true.
+      endif
     endif
   end subroutine register_axis_x_or_y
 
@@ -951,6 +1155,12 @@ contains ! ------------------------------------------------------------
     integer, intent(in) :: dimension_length
     integer :: idx, ierr
 
+    if(find_dim(restart,name,.false.)>0) then
+19    format(A,': Axis "',A,'" defined twice.')
+      write(0,19) trim(restart%filename),trim(name)
+      call MPI_Abort(MPI_COMM_WORLD,1,ierr)
+    endif
+
     idx=next_dim_idx(restart)
 
     restart%dims(idx)%name=name
@@ -962,17 +1172,21 @@ contains ! ------------------------------------------------------------
           restart%dims(idx)%dimlen=dimension_length
        endif
     else
-       call handle_ncerr(restart,"inquire dim id "//trim(name),&
-            nf90_inq_dimid(restart%ncid,trim(name),restart%dims(idx)%dimid))
-       call handle_ncerr(restart,"inquire dim len "//trim(name), &
-            nf90_inquire_dimension(restart%ncid,restart%dims(idx)%dimid,&
-            len=restart%dims(idx)%dimlen))
-       if(dimension_length/=restart%dims(idx)%dimlen) then
-          if(restart%rank==0) then
+       ierr=nf90_inq_dimid(restart%ncid,trim(name),restart%dims(idx)%dimid)
+       if(ierr==NF90_NOERR) then
+         call handle_ncerr(restart,"inquire dim len "//trim(name), &
+              nf90_inquire_dimension(restart%ncid,restart%dims(idx)%dimid,&
+              len=restart%dims(idx)%dimlen))
+         if(dimension_length/=nf90_unlimited .and. &
+              dimension_length/=restart%dims(idx)%dimlen) then
+           if(restart%rank==0) then
 38           format('Dimension "',A,'" had length ',I0,' instead of expected ',I0)
              write(0,38) trim(name),restart%dims(idx)%dimlen,dimension_length
-          endif
-          call MPI_Abort(MPI_COMM_WORLD,1,ierr)
+           endif
+           call MPI_Abort(MPI_COMM_WORLD,1,ierr)
+         endif
+       else
+         restart%dims(idx)%is_missing = .true.
        endif
     endif
 
@@ -1134,42 +1348,42 @@ contains ! ------------------------------------------------------------
 
   ! --------------------------------------------------------------------
 
-  subroutine register_restart_field_real1(restart, name, data, dimensions, is_optional)
-    implicit none
-    type(GFS_io_netCDF_type), intent(inout) :: restart
-    real, pointer :: data(:)
-    character(*), intent(in) :: dimensions(:)
-    character(*), intent(in) :: name
-    logical, optional :: is_optional
-    call register_variable(restart,name,real_size(),dimensions,is_optional=is_optional)
-    restart%vars(restart%nvars)%real1 => data
-  end subroutine register_restart_field_real1
+  ! subroutine register_restart_field_real1(restart, name, data, dimensions, is_optional)
+  !   implicit none
+  !   type(GFS_io_netCDF_type), intent(inout) :: restart
+  !   real, pointer :: data(:)
+  !   character(*), intent(in) :: dimensions(:)
+  !   character(*), intent(in) :: name
+  !   logical, optional :: is_optional
+  !   call register_variable(restart,name,real_size(),dimensions,is_optional=is_optional)
+  !   restart%vars(restart%nvars)%real1 => data
+  ! end subroutine register_restart_field_real1
 
   ! --------------------------------------------------------------------
 
-  subroutine register_restart_field_real2(restart, name, data, dimensions, is_optional)
-    implicit none
-    type(GFS_io_netCDF_type), intent(inout) :: restart
-    real, pointer :: data(:,:)
-    character(*), intent(in) :: dimensions(:)
-    character(*), intent(in) :: name
-    logical, optional :: is_optional
-    call register_variable(restart,name,real_size(),dimensions,is_optional=is_optional)
-    restart%vars(restart%nvars)%real2 => data
-  end subroutine register_restart_field_real2
+  ! subroutine register_restart_field_real2(restart, name, data, dimensions, is_optional)
+  !   implicit none
+  !   type(GFS_io_netCDF_type), intent(inout) :: restart
+  !   real, pointer :: data(:,:)
+  !   character(*), intent(in) :: dimensions(:)
+  !   character(*), intent(in) :: name
+  !   logical, optional :: is_optional
+  !   call register_variable(restart,name,real_size(),dimensions,is_optional=is_optional)
+  !   restart%vars(restart%nvars)%real2 => data
+  ! end subroutine register_restart_field_real2
 
   ! --------------------------------------------------------------------
 
-  subroutine register_restart_field_real3(restart, name, data, dimensions, is_optional)
-    implicit none
-    type(GFS_io_netCDF_type), intent(inout) :: restart
-    real, pointer :: data(:,:,:)
-    character(*), intent(in) :: dimensions(:)
-    character(*), intent(in) :: name
-    logical, optional :: is_optional
-    call register_variable(restart,name,real_size(),dimensions,is_optional=is_optional)
-    restart%vars(restart%nvars)%real3 => data
-  end subroutine register_restart_field_real3
+  ! subroutine register_restart_field_real3(restart, name, data, dimensions, is_optional)
+  !   implicit none
+  !   type(GFS_io_netCDF_type), intent(inout) :: restart
+  !   real, pointer :: data(:,:,:)
+  !   character(*), intent(in) :: dimensions(:)
+  !   character(*), intent(in) :: name
+  !   logical, optional :: is_optional
+  !   call register_variable(restart,name,real_size(),dimensions,is_optional=is_optional)
+  !   restart%vars(restart%nvars)%real3 => data
+  ! end subroutine register_restart_field_real3
 
   ! --------------------------------------------------------------------
 
@@ -1179,8 +1393,9 @@ contains ! ------------------------------------------------------------
     character(*), intent(in) :: dims(:)
     character(len=*), intent(in) :: name, type
     call register_variable(restart,name,type,dims,is_optional=.true.)
-    ! Note: not associating any pointers means the varaible will
-    ! not be automatically read.
+    ! Note: The variable cannot be automatically read or written
+    ! because it has no data pointer. When writing, the caller must
+    ! also call write_data.
   end subroutine register_field
 
   ! --------------------------------------------------------------------
@@ -1196,8 +1411,14 @@ contains ! ------------------------------------------------------------
     logical, optional :: is_optional
 
     integer :: idx, ierr, xtype, i, idim, didx
-    integer :: ncerr
+    integer :: ncerr, dimindex
     logical :: var_missing, discard
+
+    if(find_var(restart,name,.false.)>0) then
+19    format(A,': Variable "',A,'" defined twice.')
+      write(0,19) trim(restart%filename),trim(name)
+      call MPI_Abort(MPI_COMM_WORLD,1,ierr)
+    endif
 
     idx = next_var_idx(restart)
 
@@ -1249,20 +1470,47 @@ contains ! ------------------------------------------------------------
                 write(0,83) trim(restart%filename), trim(name)
              endif
              call MPI_Abort(MPI_COMM_WORLD,1,ierr)
+           else if(restart%rank==0) then
+107          format(A,': optional restart variable ',A,' is missing.')
+             print 107,trim(restart%filename),trim(name)
           endif
-          restart%nvars = restart%nvars - 1
-          return
+          restart%vars(idx)%is_missing = .true.
+       else
+         call handle_ncerr(restart,"inquire variable dimensions "//trim(name), &
+              nf90_inquire_variable(ncid=restart%ncid, &
+              varid=restart%vars(idx)%varid,  & ! input
+              dimids=restart%vars(idx)%dimids, & ! output
+              ndims=restart%vars(idx)%ndims))   ! output
+         do i=1,size(dims)
+           dimindex = find_dimid(restart,restart%vars(idx)%dimids(i),.false.)
+           if(dimindex<=0) then
+             dimindex=read_axis(restart,restart%vars(idx)%dimids(i))
+           endif
+           restart%vars(idx)%dimindex(i) = dimindex
+         end do
        endif
-       call handle_ncerr(restart,"inquire variable dimensions "//trim(name), &
-            nf90_inquire_variable(ncid=restart%ncid, &
-            varid=restart%vars(idx)%varid,  & ! input
-            dimids=restart%vars(idx)%dimids, & ! output
-            ndims=restart%vars(idx)%ndims))   ! output
-       do i=1,size(dims)
-          restart%vars(idx)%dimindex(i) = find_dimid(restart,restart%vars(idx)%dimids(i))
-       enddo
     endif
   end subroutine register_variable
+
+  ! --------------------------------------------------------------------
+
+  function read_axis(restart,dimid) result(idx)
+    use netcdf
+    implicit none
+    type(GFS_io_netCDF_type), intent(inout) :: restart
+    integer, intent(in) :: dimid
+    integer :: idx
+
+    idx=next_dim_idx(restart)
+
+    call handle_ncerr(restart,"inquire name and len of dim", &
+         nf90_inquire_dimension(restart%ncid,dimid,&
+         len=restart%dims(idx)%dimlen,name=restart%dims(idx)%name))
+
+    restart%dims(idx)%local_start=1
+    restart%dims(idx)%local_end=restart%dims(idx)%dimlen
+    restart%dims(idx)%dimid=dimid
+  end function read_axis
 
   ! --------------------------------------------------------------------
 
