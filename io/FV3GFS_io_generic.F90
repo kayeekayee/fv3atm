@@ -34,6 +34,9 @@ module FV3GFS_io_generic_mod
   end type GFS_io_generic_type
 
   logical, parameter :: super_verbose = .false.
+  logical :: module_initialized = .false.
+  logical :: use_io_netcdf = .true.
+  logical, parameter :: use_fms2_io = .true.
 
   public :: register_restart_field
   interface register_restart_field
@@ -60,6 +63,58 @@ module FV3GFS_io_generic_mod
 
 contains
 
+  subroutine initialize_module
+    use module_fv3_config,  only: fcst_mpi_comm
+    use mpp_domains_mod, only: domain2d
+    use atmosphere_mod, only: atmosphere_domain
+    use mpi
+    implicit none
+
+    type(domain2d) :: fv_domain
+    integer :: layout(2)
+    logical :: regional
+    logical :: nested
+    integer :: ngrids_atmos
+    integer :: mygrid_atmos
+    integer, pointer :: pelist(:)
+
+    logical :: any_nested
+    integer :: rank_in_fcst,ierr
+
+    if(module_initialized) then
+      return
+    endif
+
+    module_initialized=.true.
+
+    if(.not.use_io_netcdf) then
+      return
+    endif
+
+    call MPI_Comm_rank(fcst_mpi_comm,rank_in_fcst,ierr)
+
+    call atmosphere_domain(fv_domain,layout,regional,nested,ngrids_atmos,mygrid_atmos,pelist)
+
+38  format(I0,': is ',A)
+    if(nested) then
+      if(super_verbose) then
+        print 38,rank_in_fcst,'nested'
+      else
+        print 38,rank_in_fcst,'not nested'
+      endif
+    endif
+
+    call MPI_Allreduce(nested,any_nested,1,MPI_LOGICAL,MPI_LAND,fcst_mpi_comm,ierr)
+
+    if(any_nested) then
+      if(rank_in_fcst==0) then
+        write(0,'(A)') 'FV3GFS_io_netcdf does not support nesting. Will use FMS2 IO for this simulation.'
+      endif
+      use_io_netcdf=.false.
+    endif
+
+  end subroutine initialize_module
+
   logical function open_file(restart,infile,mode,domain,is_restart,dont_add_res_to_filename)
     implicit none
     type(GFS_io_generic_type) :: restart
@@ -67,18 +122,26 @@ contains
     type(domain2d), intent(in) :: domain
     logical, optional, intent(in) :: is_restart, dont_add_res_to_filename
 
-    ! Try to use the faster parallel netcdf implementation first:
-    open_file = g_open_file(restart%ionet,infile,mode,domain=domain,is_restart=is_restart, &
-                            dont_add_res_to_filename=dont_add_res_to_filename)
-    if(open_file) then
-      restart%use_fms=.false.
-      return
+    call initialize_module
+
+    open_file=.false.
+    restart%use_fms=.true.
+
+    if(use_io_netcdf) then
+      ! Try to use the faster parallel netcdf implementation first:
+      open_file = g_open_file(restart%ionet,infile,mode,domain=domain,is_restart=is_restart, &
+           dont_add_res_to_filename=dont_add_res_to_filename)
+      if(open_file) then
+        restart%use_fms=.false.
+        return
+      endif
     endif
 
-    ! Fall back to the more general fms2 io:
-    open_file = f_open_file(restart%fms2,infile,mode,domain=domain,is_restart=is_restart, &
-                            dont_add_res_to_filename=dont_add_res_to_filename)
-    restart%use_fms = .true.
+    if(use_fms2_io) then
+      ! Fall back to the more general fms2 io:
+      open_file = f_open_file(restart%fms2,infile,mode,domain=domain,is_restart=is_restart, &
+           dont_add_res_to_filename=dont_add_res_to_filename)
+    endif
   end function open_file
 
   subroutine close_file(restart)
