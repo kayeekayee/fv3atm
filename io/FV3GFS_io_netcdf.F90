@@ -656,12 +656,12 @@ contains ! ------------------------------------------------------------
       integer, intent(in) :: actual_size
       character(*), intent(in) :: what
       integer :: ierr
-      if(actual_size/=expected_size) then
-         if(restart%rank==0) then
-            write(0,38) restart%filename,trim(var%name),trim(what),actual_size,expected_size
-38          format(A,': var "',A,'" field ',A,' has size ',I0,' instead of expected size ',I0)
-         endif
-         call MPI_Abort(MPI_COMM_WORLD,1,ierr)
+      if(actual_size>expected_size) then
+         write(0,38) restart%filename,trim(var%name),trim(what),actual_size,expected_size
+38       format(A,': WARNING: array too large. Var "',A,'" array ',A,' has ',I0,' elements instead of file size ',I0,' elements. Some data will be ignored.')
+       else if(actual_size<expected_size) then
+         write(0,99) restart%filename,trim(var%name),trim(what),actual_size,expected_size
+99       format(A,': WARNING: insufficient data. Var "',A,'" array ',A,' has ',I0,' elements which is less than file size ',I0,' elements. Some data in the file will not be initialized. NetCDF will probably fill it with zeroes.')
       endif
     end subroutine check_size
   end subroutine write_var
@@ -728,6 +728,9 @@ return
           expected_size = expected_size*count(idim)
        enddo
     endif
+
+    call handle_ncerr(restart,"turn on parallel access for "//trim(var%name), &
+         nf90_var_par_access(restart%ncid,var%varid,NF90_COLLECTIVE))
 
     if(associated(var%phys1)) then
        call check_size('phys1',size(var%phys1))
@@ -806,11 +809,13 @@ return
       integer, intent(in) :: actual_size
       character(*), intent(in) :: what
       integer :: ierr
-      if(actual_size/=expected_size) then
-         if(restart%rank==0) then
-            write(0,38) restart%filename,trim(var%name),trim(what),actual_size,expected_size
-38          format(A,': var "',A,'" field ',A,' has size ',I0,' instead of expected size ',I0)
-         endif
+
+      if(actual_size>expected_size) then
+         write(0,38) restart%filename,trim(var%name),trim(what),actual_size,expected_size
+38       format(A,': WARNING: var "',A,'" array ',A,' has ',I0,' elements instead of file size ',I0,' elements. Some data will be uninitialized.')
+       else if(actual_size<expected_size) then
+         write(0,99) restart%filename,trim(var%name),trim(what),actual_size,expected_size
+99       format(A,': WARNING: var "',A,'" array ',A,' has size ',I0,' which is less than file size ',I0,'. Some data will not be read.')
          call MPI_Abort(MPI_COMM_WORLD,1,ierr)
       endif
     end subroutine check_size
@@ -869,7 +874,7 @@ return
     integer :: maxerr, mpierr
 
     if(err/=NF90_NOERR) then
-38     format(A,": ",A,": NetCDF error ",I0,": ",A)
+38     format(A,": ",A,": MPI_Aborting due to NetCDF error ",I0,": ",A)
        write(0,38) trim(restart%filename),trim(what),err,trim(nf90_strerror(err))
        call MPI_Abort(MPI_COMM_WORLD,1,mpierr)
     endif
@@ -892,10 +897,8 @@ return
     next_dim_idx=restart%ndims
 
     if(restart%ndims>GFS_io_max_dims) then
-       if(restart%rank==0) then
-38        format("FV3GFS_io_netcdf supports only ",I0," dimensions. Increase GFS_io_max_dims in FV3GFS_io_netcdf.F90.")
-          write(0,38) GFS_io_max_dims
-       endif
+38     format("MPI_Aborting because FV3GFS_io_netcdf supports only ",I0," dimensions. Increase GFS_io_max_dims in FV3GFS_io_netcdf.F90.")
+       write(0,38) GFS_io_max_dims
        call MPI_Abort(MPI_COMM_WORLD,1,ierr)
     endif
 
@@ -919,10 +922,8 @@ return
     next_var_idx=restart%nvars
 
     if(restart%nvars>GFS_io_max_vars) then
-       if(restart%rank==0) then
-38        format("FV3GFS_io_netcdf supports only ",I0," varaibles. Increase GFS_io_max_vars in FV3GFS_io_netcdf.F90.")
-          write(0,38) GFS_io_max_vars
-       endif
+38     format("MPI_Aborting because FV3GFS_io_netcdf supports only ",I0," varaibles. Increase GFS_io_max_vars in FV3GFS_io_netcdf.F90.")
+       write(0,38) GFS_io_max_vars
        call MPI_Abort(MPI_COMM_WORLD,1,ierr)
     endif
 
@@ -974,10 +975,8 @@ return
        end do
 
        if(size(buffer)/=expected_size) then
-          if(restart%rank==0) then
-38           format(A,': In write_data_int, array size ',I0,' does not match expected size ',I0)
-             write(0,38) restart%filename,size(buffer),expected_size
-          endif
+38        format(A,': MPI_Aborting because In write_data_int, array size ',I0,' does not match expected size ',I0)
+          write(0,38) restart%filename,size(buffer),expected_size
           call MPI_Abort(MPI_COMM_WORLD,1,ierr)
        endif
 
@@ -1007,10 +1006,8 @@ return
        end do
 
        if(1/=expected_size) then
-          if(restart%rank==0) then
-38           format(A,': In write_data_int, array size ',I0,' does not match expected size ',I0)
-             write(0,38) restart%filename,1,expected_size
-          endif
+38        format(A,': MPI_Aborting because In write_data_int, array size ',I0,' does not match expected size ',I0)
+          write(0,38) restart%filename,1,expected_size
           call MPI_Abort(MPI_COMM_WORLD,1,ierr)
        endif
 
@@ -1073,10 +1070,8 @@ return
        end do
 
        if(size(buffer)/=expected_size) then
-          if(restart%rank==0) then
-38           format(A,': In write_data_phys, array size ',I0,' does not match expected size ',I0)
-             write(0,38) restart%filename,size(buffer),expected_size
-          endif
+38        format(A,': MPI_Aborting because, in write_data_phys, array size ',I0,' does not match expected size ',I0)
+          write(0,38) restart%filename,size(buffer),expected_size
           call MPI_Abort(MPI_COMM_WORLD,1,ierr)
        endif
 
@@ -1098,7 +1093,7 @@ return
     integer :: idx, ierr, dlen
 
     if(find_dim(restart,name,.false.)>0) then
-19    format(A,': Axis "',A,'" defined twice.')
+19    format(A,': MPI_Aborting because axis "',A,'" is defined twice.')
       write(0,19) trim(restart%filename),trim(name)
       call MPI_Abort(MPI_COMM_WORLD,1,ierr)
     endif
@@ -1116,9 +1111,7 @@ return
        restart%dims(idx)%local_start = restart%jsc
        restart%dims(idx)%local_end = restart%jec
     else
-       if(restart%rank==0) then
-          write(0,'(A,A,A)') 'ERROR: invalid axis_name "',trim(axis_name),'"'
-       endif
+       write(0,'(A,A,A)') 'ERROR: MPI_Aborting due to invalid axis_name "',trim(axis_name),'"'
        call MPI_Abort(MPI_COMM_WORLD,1,ierr)
     endif
 
@@ -1131,10 +1124,8 @@ return
              nf90_inquire_dimension(restart%ncid,restart%dims(idx)%dimid,&
              len=restart%dims(idx)%dimlen))
         if(dlen/=restart%dims(idx)%dimlen) then
-          if(restart%rank==0) then
-38          format('Dimension "',A,'" for axis "',A,'" had length ',I0,' instead of expected ',I0)
-            write(0,38) trim(name),trim(axis_name),restart%dims(idx)%dimlen,dlen
-          endif
+38        format('MPI_Aborting because dimension "',A,'" for axis "',A,'" had length ',I0,' instead of expected ',I0)
+          write(0,38) trim(name),trim(axis_name),restart%dims(idx)%dimlen,dlen
           call MPI_Abort(MPI_COMM_WORLD,1,ierr)
         endif
       else
@@ -1156,7 +1147,7 @@ return
     integer :: idx, ierr
 
     if(find_dim(restart,name,.false.)>0) then
-19    format(A,': Axis "',A,'" defined twice.')
+19    format(A,': MPI_Aborting because axis "',A,'" is defined twice.')
       write(0,19) trim(restart%filename),trim(name)
       call MPI_Abort(MPI_COMM_WORLD,1,ierr)
     endif
@@ -1241,10 +1232,8 @@ return
     var%nattr = var%nattr+1
     next_attr_idx = var%nattr
     if(var%nattr>=GFS_io_max_var_attr) then
-       if(restart%rank==0) then
-38        format("FV3GFS_io_netcdf supports only ",I0," attributes per variable. Increase GFS_io_max_var_attr in FV3GFS_io_netcdf.F90.")
-          write(0,38) GFS_io_max_var_attr
-       endif
+38     format("MPI_Aborting because FV3GFS_io_netcdf supports only ",I0," attributes per variable. Increase GFS_io_max_var_attr in FV3GFS_io_netcdf.F90.")
+       write(0,38) GFS_io_max_var_attr
        call MPI_Abort(MPI_COMM_WORLD,1,ierr)
     endif
   end function next_attr_idx
@@ -1417,7 +1406,7 @@ return
     logical :: var_missing, discard
 
     if(find_var(restart,name,.false.)>0) then
-19    format(A,': Variable "',A,'" defined twice.')
+19    format(A,': MPI_Aborting because variable "',A,'" is defined twice.')
       write(0,19) trim(restart%filename),trim(name)
       call MPI_Abort(MPI_COMM_WORLD,1,ierr)
     endif
@@ -1433,21 +1422,17 @@ return
     else if(type=='float') then
        xtype = NF90_FLOAT
     else
-       if(restart%rank==0) then
-31        format('Variable "',A,'" has invalid type name "',A,'". I only understand double, float, int, and integer.')
-          write(0,31) trim(name), trim(type)
-       endif
-       call MPI_Abort(MPI_COMM_WORLD,1,ierr)
+31    format('MPI_Aborting because variable "',A,'" has invalid type name "',A,'". I only understand double, float, int, and integer.')
+      write(0,31) trim(name), trim(type)
+      call MPI_Abort(MPI_COMM_WORLD,1,ierr)
     endif
     restart%vars(idx)%xtype=xtype
 
     restart%vars(idx)%ndims=size(dims)
     if(restart%vars(idx)%ndims>GFS_io_max_var_dims) then
-       if(restart%rank==0) then
-38        format('Variable "',A,'" has ',I0,' dimensions which is larger than the limit of ',I0,'. Increase GFS_io_max_var_dims in FV3GFS_io_netcdf.F90.')
-          write(0,38) trim(name),size(dims),GFS_io_max_var_dims
-       endif
-       call MPI_Abort(MPI_COMM_WORLD,1,ierr)
+38    format('MPI_Aborting because Variable "',A,'" has ',I0,' dimensions which is larger than the limit of ',I0,'. Increase GFS_io_max_var_dims in FV3GFS_io_netcdf.F90.')
+      write(0,38) trim(name),size(dims),GFS_io_max_var_dims
+      call MPI_Abort(MPI_COMM_WORLD,1,ierr)
     endif
 
     restart%vars(idx)%is_optional = .false.
@@ -1467,10 +1452,8 @@ return
 
        if(var_missing) then
           if(.not.restart%vars(idx)%is_optional) then
-             if(restart%rank==0) then
-83              format(A,': mandatory restart variable ',A,' is missing')
-                write(0,83) trim(restart%filename), trim(name)
-             endif
+83           format(A,': MPI_Aborting because mandatory restart variable ',A,' is missing')
+             write(0,83) trim(restart%filename), trim(name)
              call MPI_Abort(MPI_COMM_WORLD,1,ierr)
            else if(restart%rank==0) then
 107          format(A,': optional restart variable ',A,' is missing.')
@@ -1539,10 +1522,8 @@ return
     enddo
 
     if(do_abort) then
-       if(restart%rank==0) then
-38        format(A': No dimension defined with name "',A,'"')
-          write(0,38) restart%filename,trim(name)
-       endif
+38     format(A': MPI_Aborting because no dimension is defined with name "',A,'"')
+       write(0,38) restart%filename,trim(name)
        call MPI_Abort(MPI_COMM_WORLD,1,ierr)
     endif
   end function find_dim
@@ -1573,10 +1554,8 @@ return
     enddo
 
     if(abort) then
-       if(restart%rank==0) then
-38        format(A': No variable defined with name "',A,'"')
-          write(0,38) restart%filename,trim(name)
-       endif
+38     format(A': MPI_Aborting because no variable is defined with name "',A,'"')
+       write(0,38) restart%filename,trim(name)
        call MPI_Abort(MPI_COMM_WORLD,1,ierr)
     endif
   end function find_var
@@ -1606,10 +1585,8 @@ return
     enddo
 
     if(do_abort) then
-       if(restart%rank==0) then
-38        format(A': No dimension defined with NetCDF ID "',I0,'"')
-          write(0,38) restart%filename,dimid
-       endif
+38     format(A': MPI_Aborting because no dimension is defined with NetCDF ID "',I0,'"')
+       write(0,38) restart%filename,dimid
        call MPI_Abort(MPI_COMM_WORLD,1,ierr)
     endif
   end function find_dimid
