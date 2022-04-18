@@ -2095,12 +2095,12 @@ module GFS_diagnostics
     ExtDiag(idx)%axes = 2
     ExtDiag(idx)%name = 'cpofp'
     ExtDiag(idx)%desc = 'Percent frozen precipitation'
-    ExtDiag(idx)%unit = '%'
+    ExtDiag(idx)%unit = 'fraction'
     ExtDiag(idx)%mod_name = 'gfs_phys'
     ExtDiag(idx)%intpl_method = 'bilinear'
     allocate (ExtDiag(idx)%data(nblks))
     do nb = 1,nblks
-      ExtDiag(idx)%data(nb)%var2 => IntDiag(nb)%sr(:)*100.
+      ExtDiag(idx)%data(nb)%var2 => IntDiag(nb)%sr(:)
     enddo
 
     idx = idx + 1
@@ -3250,6 +3250,18 @@ module GFS_diagnostics
     allocate (ExtDiag(idx)%data(nblks))
     do nb = 1,nblks
       ExtDiag(idx)%data(nb)%var2 => sfcprop(nb)%vfrac(:)
+    enddo
+
+    idx = idx + 1
+    ExtDiag(idx)%axes = 2
+    ExtDiag(idx)%name = 'wetness'
+    ExtDiag(idx)%desc = 'soil moisture availability in top soil layer'
+    ExtDiag(idx)%unit = 'fraction'
+    ExtDiag(idx)%mod_name = 'gfs_sfc'
+    ExtDiag(idx)%cnvfac = cn_100
+    allocate (ExtDiag(idx)%data(nblks))
+    do nb = 1,nblks
+      ExtDiag(idx)%data(nb)%var2 => sfcprop(nb)%wetness(:)
     enddo
 
   if (Model%rdlai) then
