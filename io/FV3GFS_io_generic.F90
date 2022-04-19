@@ -35,7 +35,7 @@ module FV3GFS_io_generic_mod
 
   logical, parameter :: super_verbose = .false.
   logical :: module_initialized = .false.
-  logical :: use_io_netcdf = .true.
+  logical :: use_io_netcdf = .false.
   logical, parameter :: use_fms2_io = .true.
 
   public :: register_restart_field
@@ -79,7 +79,9 @@ contains
     integer, pointer :: pelist(:)
 
     logical :: any_nested
-    integer :: rank_in_fcst,ierr
+    integer :: rank_in_fcst,ierr,iostat,unit
+
+    namelist /FV3GFS_io/ use_io_netcdf
 
     if(module_initialized) then
       return
@@ -87,9 +89,30 @@ contains
 
     module_initialized=.true.
 
-    if(.not.use_io_netcdf) then
+    open(form="FORMATTED",file="input.nml",iostat=iostat,status='OLD',newunit=unit)
+    if(iostat/=0) then
+      if(super_verbose) then
+        write(0,*) 'Could not open input.nml'
+      endif
       return
     endif
+
+    read(unit=unit,nml=FV3GFS_io,iostat=iostat)
+    if(iostat/=0) then
+      if(super_verbose) then
+        write(0,*) 'could not read FV3GFS_io namelist',iostat
+      endif
+      close(unit)
+      return
+    endif
+
+    if(super_verbose) then
+8     format('Successfully read FV3GFS_io namelist with use_io_netcdf=',L1)
+      print 8,use_io_netcdf
+    endif
+    close(unit)
+
+    if(.not.use_io_netcdf) return
 
     call MPI_Comm_rank(fcst_mpi_comm,rank_in_fcst,ierr)
 

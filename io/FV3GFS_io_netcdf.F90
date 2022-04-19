@@ -240,8 +240,6 @@ contains ! ------------------------------------------------------------
 
     ! Get tile count from mpp_domains_mod
     restart%ntiles = mpp_get_ntile_count(domain)
-    !restart%tile_num = mpp_get_current_ntile(domain)
-    !restart%tile_num = Atm(mygrid)%tile_of_mosaic
 
     !===============================================================================
     !
@@ -257,43 +255,11 @@ contains ! ------------------------------------------------------------
 
     call domain_offsets(restart,domain)
 
-    ! Get decomposition information from atmos_mod
-    !call atmosphere_resolution(restart%nx, restart%ny, global=.false.)
-    !call atmosphere_resolution(restart%cnx, restart%cny, global=.true.)
-    ! call atmosphere_control_data(restart%isc,restart%iec,restart%jsc,restart%jec, &
-    !      restart%kt) !, tile_num=restart%tile_num)
-
-    !call mpp_get_global_domain(domain,m_xbegin, m_xend, m_xsize, m_ybegin, m_yend, m_ysize)
-    !call mpp_get_data_domain(domain,m_xbegin, m_xend, m_ybegin, m_yend, m_xsize, m_xmax_size, m_ysize, m_ymax_size, m_x_is_global, m_y_is_global, m_tile_count, m_position)
-
-!     if(restart%rank==0) then
-! 41    format('Tile ',I0,' rank ',I0,' isc=',I0,' iec=',I0,' jsc=',I0,' jec=',I0)
-! 42    format('   nx=',I0,' ny=',I0,' cnx=',I0,' cny=',I0,' ntiles=',I0,' tile_num=',I0)
-!       print 41,restart%tile_num,restart%rank,restart%isc,restart%iec,restart%jsc,restart%jec
-!       print 42,restart%nx,restart%ny,restart%cnx,restart%cny,restart%ntiles,restart%tile_num
-
-!       print '(A,I0)', 'mpp_get_current_ntile says ',mpp_tile_guess
-
-!       print '(A)','  mpp_get_global_domains says:'
-
-! 44    format('   tile_count=',I0,' position=',I0,' x_is_global=',L1,' y_is_global=',L1)
-! 441   format('   position=',I0)
-! 45    format('   xbegin=',I0,' xend=',I0,' ybegin=',I0,' yend=',I0)
-! 46    format('   xsize=',I0,' ysize=',I0,' xmax_size=',I0,' ymax_size=',I0)
-! 461   format('   xsize=',I0,' ysize=',I0)
-! !      print 441,m_position
-!       print 45,m_xbegin,m_xend,m_ybegin,m_yend
-!       print 461,m_xsize,m_ysize
-    ! endif
 
     ! Construct the filename, adding .tileN if needed:
     idot=index(infile,'.',.true.)
     need=len_trim(infile)+len('.tile999.nc') ! longest string we may need
     allocate(character(len=need) :: fullname)
-9   format('ntiles = ',I0,' tile_num = ',I0)
-    if(restart%rank==0) then
-      print 9,restart%ntiles,restart%tile_num
-    endif
     if(restart%ntiles>1) then
       if(idot==0) then
         ! Need to add .nc extension
@@ -397,18 +363,6 @@ contains ! ------------------------------------------------------------
              deallocate(restart%vars(v)%phys3)
              nullify(restart%vars(v)%phys3)
           endif
-          ! if(associated(restart%vars(v)%real1)) then
-          !    deallocate(restart%vars(v)%real1)
-          !    nullify(restart%vars(v)%real1)
-          ! endif
-          ! if(associated(restart%vars(v)%real2)) then
-          !    deallocate(restart%vars(v)%real2)
-          !    nullify(restart%vars(v)%real2)
-          ! endif
-          ! if(associated(restart%vars(v)%real3)) then
-          !    deallocate(restart%vars(v)%real3)
-          !    nullify(restart%vars(v)%real3)
-          ! endif
           if(associated(restart%vars(v)%int1)) then
              deallocate(restart%vars(v)%int1)
              nullify(restart%vars(v)%int1)
@@ -503,15 +457,9 @@ contains ! ------------------------------------------------------------
          dimids=var%dimids(1:var%ndims), & ! input
          varid=var%varid))   ! output
 
-    ! if(var%write_data_called) then
-    !    ! Write whole array from first rank with write_data
-    !    call handle_ncerr(restart,"turn off parallel access for "//trim(var%name), &
-    !         nf90_var_par_access(restart%ncid,var%varid,NF90_INDEPENDENT))
-    ! else
-       ! Distributed write for register_*_field
-       call handle_ncerr(restart,"turn on parallel access for "//trim(var%name), &
-            nf90_var_par_access(restart%ncid,var%varid,NF90_COLLECTIVE))
-    ! endif
+    ! Distributed write for register_*_field
+    call handle_ncerr(restart,"turn on parallel access for "//trim(var%name), &
+         nf90_var_par_access(restart%ncid,var%varid,NF90_COLLECTIVE))
     do i=1,var%nattr
        call define_attr(restart,var,var%attr(i))
     end do
@@ -591,18 +539,6 @@ contains ! ------------------------------------------------------------
        call check_size('phys3',size(var%phys3))
        call handle_ncerr(restart,'write '//trim(var%name), &
            nf90_put_var(restart%ncid,var%varid,var%phys3,start,count))
-    ! else if(associated(var%real1)) then
-    !    call check_size('real1',size(var%real1))
-    !    call handle_ncerr(restart,'write '//trim(var%name), &
-    !        nf90_put_var(restart%ncid,var%varid,var%real1,start,count))
-    ! else if(associated(var%real2)) then
-    !    call check_size('real2',size(var%real2))
-    !    call handle_ncerr(restart,'write '//trim(var%name), &
-    !        nf90_put_var(restart%ncid,var%varid,var%real2,start,count))
-    ! else if(associated(var%real3)) then
-    !    call check_size('real3',size(var%real3))
-    !    call handle_ncerr(restart,'write '//trim(var%name), &
-    !        nf90_put_var(restart%ncid,var%varid,var%real3,start,count))
     else if(associated(var%int1)) then
        call check_size('int1',size(var%int1))
        allocate(workaround(size(var%int1)))
@@ -704,9 +640,6 @@ return
       if(associated(var%phys1)) var%phys1 = 0
       if(associated(var%phys2)) var%phys2 = 0
       if(associated(var%phys3)) var%phys3 = 0
-      ! if(associated(var%real1)) var%real1 = 0
-      ! if(associated(var%real2)) var%real2 = 0
-      ! if(associated(var%real3)) var%real3 = 0
       if(associated(var%int1)) var%int1 = 0
       if(associated(var%int2)) var%int2 = 0
       if(associated(var%int3)) var%int3 = 0
@@ -734,30 +667,22 @@ return
 
     if(associated(var%phys1)) then
        call check_size('phys1',size(var%phys1))
+       var%phys1=0
        call handle_ncerr(restart,'read '//trim(var%name), &
            nf90_get_var(restart%ncid,var%varid,var%phys1,start,count))
     else if(associated(var%phys2)) then
        call check_size('phys2',size(var%phys2))
+       var%phys2=0
        call handle_ncerr(restart,'read '//trim(var%name), &
            nf90_get_var(restart%ncid,var%varid,var%phys2,start,count))
     else if(associated(var%phys3)) then
        call check_size('phys3',size(var%phys3))
+       var%phys3=0
        call handle_ncerr(restart,'read '//trim(var%name), &
            nf90_get_var(restart%ncid,var%varid,var%phys3,start,count))
-    ! else if(associated(var%real1)) then
-    !    call check_size('real1',size(var%real1))
-    !    call handle_ncerr(restart,'read '//trim(var%name), &
-    !        nf90_get_var(restart%ncid,var%varid,var%real1,start,count))
-    ! else if(associated(var%real2)) then
-    !    call check_size('real2',size(var%real2))
-    !    call handle_ncerr(restart,'read '//trim(var%name), &
-    !        nf90_get_var(restart%ncid,var%varid,var%real2,start,count))
-    ! else if(associated(var%real3)) then
-    !    call check_size('real3',size(var%real3))
-    !    call handle_ncerr(restart,'read '//trim(var%name), &
-    !        nf90_get_var(restart%ncid,var%varid,var%real3,start,count))
     else if(associated(var%int1)) then
        call check_size('int1',size(var%int1))
+       var%int1=0
        allocate(workaround(size(var%int1)))
        call handle_ncerr(restart,'read '//trim(var%name), &
             nf90_get_var(restart%ncid,var%varid,workaround,start,count))
@@ -769,6 +694,7 @@ return
        deallocate(workaround)
     else if(associated(var%int2)) then
        call check_size('int2',size(var%int2))
+       var%int2=0
        allocate(workaround(size(var%int2)))
        call handle_ncerr(restart,'read '//trim(var%name), &
             nf90_get_var(restart%ncid,var%varid,workaround,start,count))
@@ -782,6 +708,7 @@ return
        deallocate(workaround)
     elseif(associated(var%int3)) then
        call check_size('int3',size(var%int3))
+       var%int3=0
        allocate(workaround(size(var%int3)))
        call handle_ncerr(restart,'read '//trim(var%name), &
             nf90_get_var(restart%ncid,var%varid,workaround,start,count))
@@ -812,7 +739,7 @@ return
 
       if(actual_size>expected_size) then
          write(0,38) restart%filename,trim(var%name),trim(what),actual_size,expected_size
-38       format(A,': WARNING: var "',A,'" array ',A,' has ',I0,' elements instead of file size ',I0,' elements. Some data will be uninitialized.')
+38       format(A,': WARNING: var "',A,'" array ',A,' has ',I0,' elements instead of file size ',I0,' elements. The remaining data will be filled with zero.')
        else if(actual_size<expected_size) then
          write(0,99) restart%filename,trim(var%name),trim(what),actual_size,expected_size
 99       format(A,': WARNING: var "',A,'" array ',A,' has size ',I0,' which is less than file size ',I0,'. Some data will not be read.')
@@ -943,9 +870,6 @@ return
     nullify(restart%vars(next_var_idx)%phys1)
     nullify(restart%vars(next_var_idx)%phys2)
     nullify(restart%vars(next_var_idx)%phys3)
-    ! nullify(restart%vars(next_var_idx)%real1)
-    ! nullify(restart%vars(next_var_idx)%real2)
-    ! nullify(restart%vars(next_var_idx)%real3)
     nullify(restart%vars(next_var_idx)%int1)
     nullify(restart%vars(next_var_idx)%int2)
     nullify(restart%vars(next_var_idx)%int3)
@@ -1016,39 +940,6 @@ return
        restart%vars(idx)%int1=buffer
     endif
   end subroutine write_data_int_scalar
-
-  ! --------------------------------------------------------------------
-
-!   subroutine write_data_real(restart,name,buffer)
-!     use mpi
-!     use netcdf
-!     implicit none
-!     type(GFS_io_netCDF_type), intent(inout) :: restart
-!     character(*), intent(in) :: name
-!     real, intent(in) :: buffer(:)
-!     integer :: idx, idim, expected_size, ierr
-
-!     if(restart%write) then
-!        idx=find_var(restart,name)
-
-!        expected_size=1
-!        do idim=1,restart%vars(idx)%ndims
-!           expected_size = expected_size*restart%dims(restart%vars(idx)%dimindex(idim))%dimlen
-!        end do
-
-!        if(size(buffer)/=expected_size) then
-!           if(restart%rank==0) then
-! 38           format(A,': In write_data_real, array size ',I0,' does not match expected size ',I0)
-!              write(0,38) restart%filename,size(buffer),expected_size
-!           endif
-!           call MPI_Abort(MPI_COMM_WORLD,1,ierr)
-!        endif
-
-!        restart%vars(idx)%write_data_called=.true.
-!        allocate(restart%vars(idx)%real1(size(buffer)))
-!        restart%vars(idx)%real1=buffer
-!     endif
-!   end subroutine write_data_real
 
   ! --------------------------------------------------------------------
 
@@ -1339,45 +1230,6 @@ return
 
   ! --------------------------------------------------------------------
 
-  ! subroutine register_restart_field_real1(restart, name, data, dimensions, is_optional)
-  !   implicit none
-  !   type(GFS_io_netCDF_type), intent(inout) :: restart
-  !   real, pointer :: data(:)
-  !   character(*), intent(in) :: dimensions(:)
-  !   character(*), intent(in) :: name
-  !   logical, optional :: is_optional
-  !   call register_variable(restart,name,real_size(),dimensions,is_optional=is_optional)
-  !   restart%vars(restart%nvars)%real1 => data
-  ! end subroutine register_restart_field_real1
-
-  ! --------------------------------------------------------------------
-
-  ! subroutine register_restart_field_real2(restart, name, data, dimensions, is_optional)
-  !   implicit none
-  !   type(GFS_io_netCDF_type), intent(inout) :: restart
-  !   real, pointer :: data(:,:)
-  !   character(*), intent(in) :: dimensions(:)
-  !   character(*), intent(in) :: name
-  !   logical, optional :: is_optional
-  !   call register_variable(restart,name,real_size(),dimensions,is_optional=is_optional)
-  !   restart%vars(restart%nvars)%real2 => data
-  ! end subroutine register_restart_field_real2
-
-  ! --------------------------------------------------------------------
-
-  ! subroutine register_restart_field_real3(restart, name, data, dimensions, is_optional)
-  !   implicit none
-  !   type(GFS_io_netCDF_type), intent(inout) :: restart
-  !   real, pointer :: data(:,:,:)
-  !   character(*), intent(in) :: dimensions(:)
-  !   character(*), intent(in) :: name
-  !   logical, optional :: is_optional
-  !   call register_variable(restart,name,real_size(),dimensions,is_optional=is_optional)
-  !   restart%vars(restart%nvars)%real3 => data
-  ! end subroutine register_restart_field_real3
-
-  ! --------------------------------------------------------------------
-
   subroutine register_field(restart, name, type, dims)
     implicit none
     type(GFS_io_netCDF_type), intent(inout) :: restart
@@ -1455,7 +1307,7 @@ return
 83           format(A,': MPI_Aborting because mandatory restart variable ',A,' is missing')
              write(0,83) trim(restart%filename), trim(name)
              call MPI_Abort(MPI_COMM_WORLD,1,ierr)
-           else if(restart%rank==0) then
+           else if(restart%rank==0 .and. super_verbose) then
 107          format(A,': optional restart variable ',A,' is missing.')
              print 107,trim(restart%filename),trim(name)
           endif
