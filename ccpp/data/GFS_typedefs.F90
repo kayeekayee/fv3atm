@@ -1118,6 +1118,10 @@ module GFS_typedefs
 
 !--- potential temperature definition in surface layer physics
     logical              :: thsfc_loc       !< flag for local vs. standard potential temperature
+!--- flux method in 2-m diagnostics
+    logical              :: diag_flux       !< flag for flux method in 2-m diagnostics
+!--- log method in 2-m diagnostics (for stable conditions)
+    logical              :: diag_log        !< flag for log method in 2-m diagnostics (for stable conditions)
 
 !--- vertical diffusion
     real(kind=kind_phys) :: xkzm_m          !< [in] bkgd_vdif_m  background vertical diffusion for momentum
@@ -3525,6 +3529,10 @@ module GFS_typedefs
 
 !--- potential temperature definition in surface layer physics
     logical              :: thsfc_loc      = .true.          !< flag for local vs. standard potential temperature
+!--- flux method in 2-m diagnostics
+    logical              :: diag_flux      = .false.         !< flag for flux method in 2-m diagnostics
+!--- flux method in 2-m diagnostics (for stable conditions) 
+    logical              :: diag_log       = .false.         !< flag for log method in 2-m diagnostics (for stable conditions)
                                                              !<.true. means use local (gridpoint) surface pressure to define potential temperature
                                                              !<       this is the current GFS physics approach
                                                              !<.false. means use reference pressure of 1000 hPa to define potential temperature
@@ -3719,6 +3727,8 @@ module GFS_typedefs
                                sfc_z0_type,                                                 &
                           !--- switch beteeen local and standard potential temperature
                                thsfc_loc,                                                   &
+                          !--- switches in 2-m diagnostics
+                               diag_flux, diag_log,                                         &
                           !    vertical diffusion
                                xkzm_m, xkzm_h, xkzm_s, xkzminv, moninq_fac, dspfac,         &
                                bl_upfr, bl_dnfr, rlmx, elmx, sfc_rlm,                       &
@@ -4457,6 +4467,17 @@ module GFS_typedefs
 
 !--- potential temperature reference in sfc layer
     Model%thsfc_loc        = thsfc_loc
+    if (Model%lsm == Model%lsm_ruc)
+!--- flux method in 2-m diagnostics
+      Model%diag_flux        = .true.
+!--- flux method in 2-m diagnostics (for stable conditions)
+      Model%diag_log         = .false.
+    else
+!--- flux method in 2-m diagnostics
+      Model%diag_flux        = diag_flux
+!--- flux method in 2-m diagnostics (for stable conditions)
+      Model%diag_log         = diag_log
+    endif
 
 !--- vertical diffusion
     Model%xkzm_m           = xkzm_m

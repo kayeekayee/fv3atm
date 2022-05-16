@@ -4064,6 +4064,18 @@
   units = flag
   dimensions = ()
   type = logical
+[diag_flux]
+  standard_name = flag_for_flux_method_in_2m_diagnostics
+  long_name = flag for flux method in 2-m diagnostics
+  units = flag
+  dimensions = ()
+  type = logical
+[diag_log]
+  standard_name = flag_for_log_method_in_2m_diagnostics
+  long_name = flag for log method in 2-m diagnostics
+  units = flag
+  dimensions = ()
+  type = logical
 [hybedmf]
   standard_name = flag_for_hybrid_edmf_pbl_scheme
   long_name = flag for hybrid edmf pbl scheme (moninedmf)
