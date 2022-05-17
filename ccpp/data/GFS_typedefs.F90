@@ -4467,7 +4467,7 @@ module GFS_typedefs
 
 !--- potential temperature reference in sfc layer
     Model%thsfc_loc        = thsfc_loc
-    if (Model%lsm == Model%lsm_ruc)
+    if (Model%lsm == Model%lsm_ruc) then
 !--- flux method in 2-m diagnostics
       Model%diag_flux        = .true.
 !--- flux method in 2-m diagnostics (for stable conditions)
