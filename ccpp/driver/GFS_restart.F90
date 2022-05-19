@@ -133,7 +133,7 @@ module GFS_restart
        Restart%num3d = Model%ntot3d+1
     endif
     ! General Convection
-    if (Model%imfdeepcnv .ge. 0 .or. Model%imfshalcnv .ge. 0) then
+    if (Model%imfdeepcnv == Model%imfdeepcnv_gf) then
       Restart%num3d = Restart%num3d + 1
     endif
     ! GF
@@ -143,6 +143,14 @@ module GFS_restart
     ! MYNN PBL
     if (Model%do_mynnedmf) then
       Restart%num3d = Restart%num3d + 9
+    endif
+
+    if (Model%num_dfi_radar > 0) then
+      do itime=1,Model%dfi_radar_max_intervals
+        if(Model%ix_dfi_radar(itime)>0) then
+          Restart%num3d = Restart%num3d + 1
+        endif
+      enddo
     endif
 
     allocate (Restart%name2d(Restart%num2d))
@@ -429,8 +437,9 @@ module GFS_restart
        num = Model%ntot3d
     endif
 
-    !--Convection variable used in CB cloud fraction
-    if (Model%imfdeepcnv .ge. 0 .or. Model%imfshalcnv .ge. 0) then
+    !--Convection variable used in CB cloud fraction. Presently this
+    !--is only needed in sgscloud_radpre for imfdeepcnv == imfdeepcnv_gf.
+    if (Model%imfdeepcnv == Model%imfdeepcnv_gf) then
       num = num + 1
       Restart%name3d(num) = 'cnv_3d_ud_mf'
       do nb = 1,nblks
