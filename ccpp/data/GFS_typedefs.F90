@@ -4467,7 +4467,7 @@ module GFS_typedefs
 
 !--- potential temperature reference in sfc layer
     Model%thsfc_loc        = thsfc_loc
-    if (Model%lsm == Model%lsm_ruc) then
+    if (Model%do_mynnsfclay) then
 !--- flux method in 2-m diagnostics
       Model%diag_flux        = .true.
 !--- flux method in 2-m diagnostics (for stable conditions)
@@ -5877,6 +5877,8 @@ module GFS_typedefs
       print *, ' rbcr              : ', Model%rbcr
       print *, ' do_mynnedmf       : ', Model%do_mynnedmf
       print *, ' do_mynnsfclay     : ', Model%do_mynnsfclay
+      print *, ' diag_flux         : ', Model%diag_flux
+      print *, ' diag_log          : ', Model%diag_log
       print *, ' do_myjsfc         : ', Model%do_myjsfc
       print *, ' do_myjpbl         : ', Model%do_myjpbl
       print *, ' do_ugwp           : ', Model%do_ugwp
