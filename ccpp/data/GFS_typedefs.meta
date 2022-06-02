@@ -1496,21 +1496,35 @@
   kind = kind_phys
   active = (control_for_land_surface_scheme == identifier_for_ruc_land_surface_scheme)
 [snowfallac_land]
-  standard_name = surface_snow_amount_over_land
-  long_name = run-total snow accumulation on the ground
+  standard_name = surface_snow_amount_vardens_over_land
+  long_name = run-total snow accumulation on the ground with variable snow density over land
   units = kg m-2
   dimensions = (horizontal_loop_extent)
   type = real
   kind = kind_phys
   active = (control_for_land_surface_scheme == identifier_for_ruc_land_surface_scheme)
+[acsnow_land]
+  standard_name = surface_snow_lwe_thickness_amount_over_land
+  long_name = run-total snowfall water equivalent over land
+  units = kg m-2
+  dimensions = (horizontal_loop_extent)
+  type = real
+  kind = kind_phys
 [snowfallac_ice]
-  standard_name = surface_snow_amount_over_ice
-  long_name = run-total snow accumulation on the ice
+  standard_name = surface_snow_amount_vardens_over_ice
+  long_name = run-total snow accumulation on the ground with variable snow density over ice
   units = kg m-2
   dimensions = (horizontal_loop_extent)
   type = real
   kind = kind_phys
   active = (control_for_land_surface_scheme == identifier_for_ruc_land_surface_scheme)
+[acsnow_ice]
+  standard_name = surface_snow_lwe_thickness_amount_over_ice
+  long_name = run-total snowfall water equivalent over ice
+  units = kg m-2
+  dimensions = (horizontal_loop_extent)
+  type = real
+  kind = kind_phys
 [ustm]
   standard_name = surface_friction_velocity_for_momentum
   long_name = friction velocity isolated for momentum only
@@ -4047,6 +4061,18 @@
 [thsfc_loc]
   standard_name = flag_for_reference_pressure_theta
   long_name = flag for reference pressure in theta calculation
+  units = flag
+  dimensions = ()
+  type = logical
+[diag_flux]
+  standard_name = flag_for_flux_method_in_2m_diagnostics
+  long_name = flag for flux method in 2-m diagnostics
+  units = flag
+  dimensions = ()
+  type = logical
+[diag_log]
+  standard_name = flag_for_log_method_in_2m_diagnostics
+  long_name = flag for log method in 2-m diagnostics
   units = flag
   dimensions = ()
   type = logical
@@ -6629,9 +6655,51 @@
   dimensions = (horizontal_loop_extent)
   type = real
   kind = kind_phys
+[sbsno]
+  standard_name = snow_deposition_sublimation_upward_latent_heat_flux
+  long_name = latent heat flux from snow depo/subl
+  units = W m-2
+  dimensions = (horizontal_loop_extent)
+  type = real
+  kind = kind_phys
+[evbs]
+  standard_name = soil_upward_latent_heat_flux
+  long_name = soil upward latent heat flux
+  units = W m-2
+  dimensions = (horizontal_loop_extent)
+  type = real
+  kind = kind_phys
+[evcw]
+  standard_name = canopy_upward_latent_heat_flux
+  long_name = canopy upward latent heat flux
+  units = W m-2
+  dimensions = (horizontal_loop_extent)
+  type = real
+  kind = kind_phys
+[trans]
+  standard_name = transpiration_flux
+  long_name = total plant transpiration rate
+  units = W m-2
+  dimensions = (horizontal_loop_extent)
+  type = real
+  kind = kind_phys
 [soilm]
   standard_name = soil_moisture_content
   long_name = soil moisture
+  units = kg m-2
+  dimensions = (horizontal_loop_extent)
+  type = real
+  kind = kind_phys
+[snowmt_land]
+  standard_name = surface_snow_melt_over_land
+  long_name = snow melt during timestep over land
+  units = kg m-2
+  dimensions = (horizontal_loop_extent)
+  type = real
+  kind = kind_phys
+[snowmt_ice]
+  standard_name = surface_snow_melt_over_ice
+  long_name = snow melt during timestep over ice
   units = kg m-2
   dimensions = (horizontal_loop_extent)
   type = real
@@ -8505,20 +8573,6 @@
   dimensions = (horizontal_loop_extent)
   type = real
   kind = kind_phys
-[evbs]
-  standard_name = soil_upward_latent_heat_flux
-  long_name = soil upward latent heat flux
-  units = W m-2
-  dimensions = (horizontal_loop_extent)
-  type = real
-  kind = kind_phys
-[evcw]
-  standard_name = canopy_upward_latent_heat_flux
-  long_name = canopy upward latent heat flux
-  units = W m-2
-  dimensions = (horizontal_loop_extent)
-  type = real
-  kind = kind_phys
 [pah]
   standard_name = total_precipitation_advected_heat
   long_name = precipitation advected heat - total
@@ -9654,13 +9708,6 @@
   dimensions = (horizontal_loop_extent,vertical_layer_dimension)
   type = real
   kind = kind_phys
-[sbsno]
-  standard_name = snow_deposition_sublimation_upward_latent_heat_flux
-  long_name = latent heat flux from snow depo/subl
-  units = W m-2
-  dimensions = (horizontal_loop_extent)
-  type = real
-  kind = kind_phys
 [scmpsw]
   standard_name = components_of_surface_downward_shortwave_fluxes
   long_name = derived type for special components of surface downward shortwave fluxes
@@ -9861,13 +9908,6 @@
   units = flag
   dimensions = ()
   type = logical
-[trans]
-  standard_name = transpiration_flux
-  long_name = total plant transpiration rate
-  units = W m-2
-  dimensions = (horizontal_loop_extent)
-  type = real
-  kind = kind_phys
 [tseal]
   standard_name = surface_skin_temperature_for_nsst
   long_name = ocean surface skin temperature
