@@ -10,12 +10,8 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     message(STATUS "Setting build type to 'Release' as none was specified.")
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build." FORCE)
     # Set the possible values of build type for cmake-gui
-    set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "Coverage")
+    set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release")
 endif()
-
-#------------------------------------------------------------------------------
-# CMake Modules
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/framework/cmake")
 
 #------------------------------------------------------------------------------
 # Call to CCPP code generator
@@ -55,20 +51,12 @@ if(MPI)
 endif()
 
 #------------------------------------------------------------------------------
-# Set additional flags for debug build
-if(DEBUG)
-  if(CMAKE_Fortran_COMPILER_ID MATCHES "Intel")
-    set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -init=snan,arrays")
-  endif()
-endif()
-
-#------------------------------------------------------------------------------
 # Set flag for 32bit dynamics build
 if(32BIT)
   message(STATUS "Compile CCPP slow physics with 64-bit precision, fast physics with 32-bit precision")
   add_definitions(-DOVERLOAD_R4)
   if(CMAKE_Fortran_COMPILER_ID MATCHES "Intel")
-    set(CMAKE_Fortran_FLAGS_PHYSICS  "-real-size 64 -no-prec-div -no-prec-sqrt")
+    set(CMAKE_Fortran_FLAGS_PHYSICS  "-real-size 64")
   elseif(CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
     set(CMAKE_Fortran_FLAGS_PHYSICS  "-fdefault-real-8 -fdefault-double-8")
   endif()
@@ -116,7 +104,6 @@ add_library(
 
 # Compile GFS_diagnostics.F90 without optimization, this leads to out of memory errors on wcoss_dell_p3
 set_property(SOURCE driver/GFS_diagnostics.F90 APPEND_STRING PROPERTY COMPILE_FLAGS "-O0")
-
 
 target_link_libraries(fv3ccpp PUBLIC ccpp_framework)
 target_link_libraries(fv3ccpp PUBLIC ccpp_physics)

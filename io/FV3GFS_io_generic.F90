@@ -77,6 +77,8 @@ contains
     integer :: ngrids_atmos
     integer :: mygrid_atmos
     integer, pointer :: pelist(:)
+    logical :: moving_nest_parent
+    logical :: is_moving_nest
 
     logical :: any_nested
     integer :: rank_in_fcst,ierr,iostat,unit
@@ -116,7 +118,9 @@ contains
 
     call MPI_Comm_rank(fcst_mpi_comm,rank_in_fcst,ierr)
 
-    call atmosphere_domain(fv_domain,layout,regional,nested,ngrids_atmos,mygrid_atmos,pelist)
+    call atmosphere_domain ( fv_domain=fv_domain, layout=layout, regional=regional, nested=nested, &
+                                moving_nest_parent=moving_nest_parent, is_moving_nest=is_moving_nest, &
+                                ngrids_atmos=ngrids_atmos, mygrid_atmos=mygrid_atmos, pelist=pelist )
 
 38  format(I0,': is ',A)
     if(nested) then
@@ -139,11 +143,16 @@ contains
   end subroutine initialize_module
 
   logical function open_file(restart,infile,mode,domain,is_restart,dont_add_res_to_filename)
+    use module_fv3_config,  only: fcst_mpi_comm
+    use mpi
     implicit none
     type(GFS_io_generic_type) :: restart
     character(*), intent(in) :: infile, mode
     type(domain2d), intent(in) :: domain
     logical, optional, intent(in) :: is_restart, dont_add_res_to_filename
+    integer :: ierr, rank
+
+    call MPI_Comm_rank(fcst_mpi_comm,rank,ierr)
 
     call initialize_module
 
@@ -155,13 +164,27 @@ contains
       open_file = g_open_file(restart%ionet,infile,mode,domain=domain,is_restart=is_restart, &
            dont_add_res_to_filename=dont_add_res_to_filename)
       if(open_file) then
+        if(rank==0) then
+83        format(A,': using NetCDF I/O in mode ',A)
+          write(0,83) trim(infile),trim(mode)
+        endif
         restart%use_fms=.false.
         return
+      else
+308   format(A)
+      write(0,803) 'g_open_file failed'
       endif
+    elseif(rank==0) then
+803   format(A)
+      write(0,803) 'IO NetCDF is disabled by namelist'
     endif
 
     if(use_fms2_io) then
       ! Fall back to the more general fms2 io:
+      if(rank==0) then
+38      format(A,': falling back to fms2 io in mode ',A)
+        write(0,38) trim(infile),trim(mode)
+      endif
       open_file = f_open_file(restart%fms2,infile,mode,domain=domain,is_restart=is_restart, &
            dont_add_res_to_filename=dont_add_res_to_filename)
     endif

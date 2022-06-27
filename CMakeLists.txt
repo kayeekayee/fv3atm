@@ -14,6 +14,9 @@ set(use_WRTCOMP ON)
 set(GFS_PHYS    ON)
 set(GFS_TYPES   ON)
 set(USE_GFSL63  ON)
+if(MOVING_NEST)
+  set(MOVING_NEST ON)
+endif()
 add_subdirectory(atmos_cubed_sphere)
 
 ###############################################################################
@@ -22,7 +25,7 @@ add_subdirectory(atmos_cubed_sphere)
 if(INLINE_POST)
   set(BUILD_POSTEXEC OFF)
   add_subdirectory(upp)
-  set(POST_SRC io/inline_post.F90 io/post_nems_routines.F90 io/post_gfs.F90 io/post_regional.F90)
+  set(POST_SRC io/inline_post.F90 io/post_nems_routines.F90 io/post_fv3.F90)
 else()
   set(POST_SRC io/inline_post_stub.F90)
   list(APPEND _fv3atm_defs_private NO_INLINE_POST)
@@ -30,6 +33,10 @@ endif()
 
 if(NOT PARALLEL_NETCDF)
   list(APPEND _fv3atm_defs_private NO_PARALLEL_NETCDF)
+endif()
+
+if(MOVING_NEST)
+  list(APPEND _fv3atm_defs_private MOVING_NEST)
 endif()
 
 add_library(fv3atm
@@ -42,8 +49,8 @@ add_library(fv3atm
   cpl/module_cplfields.F90
   cpl/module_cap_cpl.F90
   io/FV3GFS_io.F90
-  io/FV3GFS_io_netcdf.F90
   io/FV3GFS_io_generic.F90
+  io/FV3GFS_io_netcdf.F90
   io/module_write_netcdf.F90
   io/module_fv3_io_def.F90
   io/module_write_internal_state.F90

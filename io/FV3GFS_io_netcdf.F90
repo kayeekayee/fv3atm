@@ -30,6 +30,7 @@ module FV3GFS_io_netCDF_mod
      integer :: local_start ! start of data within this rank
      integer :: local_end ! end of data within this rank
      logical :: is_missing ! tried to register_axis for a variable not in the netcdf file (open for read)
+     logical :: is_initialized = .false.
   end type GFS_io_dim_type
 
   type, public :: GFS_io_var_type
@@ -49,6 +50,7 @@ module FV3GFS_io_netCDF_mod
      integer,         pointer ::  int1(:),    int2(:,:),  int3(:,:,:)
 
      logical :: is_optional, write_data_called, is_missing
+     logical :: is_initialized = .false.
   end type GFS_io_var_type
 
   type, public :: GFS_io_netCDF_type
@@ -79,6 +81,8 @@ module FV3GFS_io_netCDF_mod
      ! Variable storage
      integer :: nvars
      type(GFS_io_var_type) :: vars(GFS_io_max_vars)
+
+     logical :: is_initialized = .false.
   end type GFS_io_netCDF_type
 
   public :: register_restart_field
@@ -236,7 +240,13 @@ contains ! ------------------------------------------------------------
     endif
 
     ! Give up if any process on this tile failed.
-    if(.not.allreduce_and(open_file,restart%comm)) return
+    if(.not.allreduce_and(open_file,restart%comm)) then
+      if(restart%rank==0) then
+        write(0,'(A)') "Allreduce_and returned false, so at least one process failed a sanity check."
+      endif
+      open_file=.false.
+      return
+    endif
 
     ! Get tile count from mpp_domains_mod
     restart%ntiles = mpp_get_ntile_count(domain)
@@ -515,14 +525,38 @@ contains ! ------------------------------------------------------------
        expected_size=1
        do idim=1,var%ndims
           start(idim) = 1
-          count(idim) = restart%dims(var%dimindex(idim))%dimlen
+          if(.not.restart%dims(var%dimindex(idim))%is_initialized) then
+76           format(A,": var ",A," dimension ",I0," with id ",I0," was never defined")
+             write(0,76) trim(restart%filename),trim(var%name),idim
+             count(idim) = 1
+          else
+             count(idim) = restart%dims(var%dimindex(idim))%dimlen
+             if(count(idim)<=0) then
+67              format(A,": var ",A," dimension ",I0," with id ",I0," has invalid size ",I0)
+                write(0,67) trim(restart%filename),trim(var%name),idim,var%dimindex(idim),count(idim)
+                count(idim)=1
+             endif
+          endif
           expected_size = expected_size*count(idim)
        enddo
     else
        expected_size=1
        do idim=1,var%ndims
-          start(idim) = restart%dims(var%dimindex(idim))%local_start
-          count(idim) = restart%dims(var%dimindex(idim))%local_end - start(idim) + 1
+          if(.not.restart%dims(var%dimindex(idim))%is_initialized) then
+176          format(A,": var ",A," dimension ",I0," was never defined")
+             write(0,176) trim(restart%filename),trim(var%name),idim
+             start(idim) = 1
+             count(idim) = 1
+          else
+             start(idim) = restart%dims(var%dimindex(idim))%local_start
+             count(idim) = restart%dims(var%dimindex(idim))%local_end - start(idim) + 1
+             if(count(idim)<=0) then
+167             format(A,": var ",A," dimension ",I0," with id ",I0," has invalid size ",I0,' from start=',I0,' end=',I0)
+                write(0,67) trim(restart%filename),trim(var%name),idim,var%dimindex(idim),count(idim),restart%dims(var%dimindex(idim))%local_start,restart%dims(var%dimindex(idim))%local_end
+                start(idim) = 1
+                count(idim) = 1
+             endif
+          endif
           expected_size = expected_size*count(idim)
        enddo
     endif
@@ -650,14 +684,38 @@ return
        expected_size=1
        do idim=1,var%ndims
           start(idim) = 1
-          count(idim) = restart%dims(var%dimindex(idim))%dimlen
+          if(.not.restart%dims(var%dimindex(idim))%is_initialized) then
+76           format(A,": var ",A," dimension ",I0," was never defined")
+             write(0,76) trim(restart%filename),trim(var%name),idim
+             count(idim) = 1
+          else
+             count(idim) = restart%dims(var%dimindex(idim))%dimlen
+             if(count(idim)<=0) then
+67              format(A,": var ",A," dimension ",I0," with id ",I0," has invalid size ",I0)
+                write(0,67) trim(restart%filename),trim(var%name),idim,var%dimindex(idim),count(idim)
+                count(idim) = 1
+             endif
+          endif
           expected_size = expected_size*count(idim)
        enddo
     else
        expected_size=1
        do idim=1,var%ndims
-          start(idim) = restart%dims(var%dimindex(idim))%local_start
-          count(idim) = restart%dims(var%dimindex(idim))%local_end - start(idim) + 1
+          if(.not.restart%dims(var%dimindex(idim))%is_initialized) then
+176          format(A,": var ",A," dimension ",I0," was never defined")
+             write(0,176) trim(restart%filename),trim(var%name),idim
+             start(idim) = 1
+             count(idim) = 1
+          else
+             start(idim) = restart%dims(var%dimindex(idim))%local_start
+             count(idim) = restart%dims(var%dimindex(idim))%local_end - start(idim) + 1
+             if(count(idim)<=0) then
+167             format(A,": var ",A," dimension ",I0," with id ",I0," has invalid size ",I0,' from start=',I0,' end=',I0)
+                write(0,67) trim(restart%filename),trim(var%name),idim,var%dimindex(idim),count(idim),restart%dims(var%dimindex(idim))%local_start,restart%dims(var%dimindex(idim))%local_end
+                start(idim) = 1
+                count(idim) = 1
+             endif
+          endif
           expected_size = expected_size*count(idim)
        enddo
     endif
@@ -725,7 +783,7 @@ return
     else if(super_verbose) then
        ! This is not an error. It is expected for non-restart variables.
 101    format(A,': No destination for reading variable "',A,'"')
-       write(0,101) restart%filename,trim(var%name)
+       write(0,101) trim(restart%filename),trim(var%name)
     endif
 
   contains
@@ -738,10 +796,10 @@ return
       integer :: ierr
 
       if(actual_size>expected_size) then
-         write(0,38) restart%filename,trim(var%name),trim(what),actual_size,expected_size
+         write(0,38) trim(restart%filename),trim(var%name),trim(what),actual_size,expected_size
 38       format(A,': WARNING: var "',A,'" array ',A,' has ',I0,' elements instead of file size ',I0,' elements. The remaining data will be filled with zero.')
        else if(actual_size<expected_size) then
-         write(0,99) restart%filename,trim(var%name),trim(what),actual_size,expected_size
+         write(0,99) trim(restart%filename),trim(var%name),trim(what),actual_size,expected_size
 99       format(A,': WARNING: var "',A,'" array ',A,' has size ',I0,' which is less than file size ',I0,'. Some data will not be read.')
          call MPI_Abort(MPI_COMM_WORLD,1,ierr)
       endif
@@ -835,6 +893,7 @@ return
     restart%dims(next_dim_idx)%local_start=0
     restart%dims(next_dim_idx)%local_end=0
     restart%dims(next_dim_idx)%is_missing = .true.
+    restart%dims(next_dim_idx)%is_initialized = .true.
   end function next_dim_idx
 
   ! --------------------------------------------------------------------
@@ -877,6 +936,7 @@ return
     restart%vars(next_var_idx)%is_optional = .false.
     restart%vars(next_var_idx)%is_missing = .false.
     restart%vars(next_var_idx)%write_data_called = .false.
+    restart%vars(next_var_idx)%is_initialized = .true.
   end function next_var_idx
 
   ! --------------------------------------------------------------------
@@ -1015,9 +1075,17 @@ return
              nf90_inquire_dimension(restart%ncid,restart%dims(idx)%dimid,&
              len=restart%dims(idx)%dimlen))
         if(dlen/=restart%dims(idx)%dimlen) then
-38        format('MPI_Aborting because dimension "',A,'" for axis "',A,'" had length ',I0,' instead of expected ',I0)
-          write(0,38) trim(name),trim(axis_name),restart%dims(idx)%dimlen,dlen
-          call MPI_Abort(MPI_COMM_WORLD,1,ierr)
+38         format(A,': MPI_Aborting because dimension "',A,'" for axis "',A,'" had length ',I0,' instead of expected ',I0)
+           write(0,38) trim(restart%filename),trim(name),trim(axis_name),restart%dims(idx)%dimlen,dlen
+           call MPI_Abort(MPI_COMM_WORLD,1,ierr)
+        elseif(dlen<=0) then
+109       format(A,': error: Dimension ',A,' has invalid length ',I0)
+          write(0,109) trim(restart%filename),trim(name),dlen
+          restart%dims(idx)%dimlen=0
+          restart%dims(idx)%is_missing = .true.
+        elseif(super_verbose) then
+107       format(A,': dimension ',A,' has length ',I0)
+          write(0,107) trim(restart%filename),trim(name),restart%dims(idx)%dimlen
         endif
       else
         restart%dims(idx)%is_missing = .true.
@@ -1452,8 +1520,11 @@ return
     implicit none
     integer, intent(in) :: comm
     logical, intent(inout) :: flag
+    logical :: inval,outval
     integer :: ierr
-    call MPI_Allreduce(flag,allreduce_and,1,MPI_LOGICAL,MPI_LAND,comm,ierr)
-    flag=allreduce_and
+    inval=flag
+    call MPI_Allreduce(inval,outval,1,MPI_LOGICAL,MPI_LAND,comm,ierr)
+    flag=outval
+    allreduce_and=outval
   end function allreduce_and
 end module FV3GFS_io_netCDF_mod
