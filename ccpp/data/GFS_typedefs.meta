@@ -754,6 +754,14 @@
   type = real
   kind = kind_phys
   active = (do_smoke_coupling)
+[aod_in]
+  standard_name = assimilated_aod_input
+  long_name = assimilated aod input
+  units = none
+  dimensions = (horizontal_dimension,1)
+  type = real
+  kind = kind_phys
+  active = (control_for_deep_convection_scheme == identifier_for_grell_freitas_deep_convection)
 [z0base]
   standard_name = baseline_surface_roughness_length
   long_name = baseline surface roughness length for momentum in meter
@@ -2588,6 +2596,22 @@
 [qci_conv]
   standard_name = convective_cloud_condesate_after_rainout
   long_name = convective cloud condesate after rainout
+  units = kg kg-1
+  dimensions = (horizontal_loop_extent,vertical_layer_dimension)
+  type = real
+  kind = kind_phys
+  active = (control_for_deep_convection_scheme == identifier_for_grell_freitas_deep_convection)
+[qci_conv_timeave]
+  standard_name = time_averaged_convective_cloud_condesate_after_rainout
+  long_name = time averaged convective cloud condesate after rainout
+  units = kg kg-1
+  dimensions = (horizontal_loop_extent,vertical_layer_dimension)
+  type = real
+  kind = kind_phys
+  active = (control_for_deep_convection_scheme == identifier_for_grell_freitas_deep_convection)
+[qci_conv_accum]
+  standard_name = accumulated_convective_cloud_condesate_after_rainout
+  long_name = accumulatedconvective cloud condesate after rainout
   units = kg kg-1
   dimensions = (horizontal_loop_extent,vertical_layer_dimension)
   type = real
@@ -6474,6 +6498,22 @@
   type = real
   kind = kind_phys
   active = ( control_for_deep_convection_scheme .ge. 0 .or. control_for_shallow_convection_scheme .ge. 0 )
+[ud_mf_accum]
+  standard_name = accumulated_atmosphere_updraft_convective_mass_flux
+  long_name = accumulated (updraft mass flux) * delt
+  units = kg m-2
+  dimensions = (horizontal_loop_extent,vertical_layer_dimension)
+  type = real
+  kind = kind_phys
+  active = (control_for_deep_convection_scheme == identifier_for_grell_freitas_deep_convection)
+[ud_mf_timeave]
+  standard_name = time_average_atmosphere_updraft_convective_mass_flux
+  long_name = time averaged (updraft mass flux) * delt
+  units = kg m-2
+  dimensions = (horizontal_loop_extent,vertical_layer_dimension)
+  type = real
+  kind = kind_phys
+  active = (control_for_deep_convection_scheme == identifier_for_grell_freitas_deep_convection)
 [in_nm]
   standard_name = ice_nucleation_number_from_climatology
   long_name = ice nucleation number in MG MP

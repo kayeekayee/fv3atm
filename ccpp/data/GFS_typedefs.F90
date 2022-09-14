@@ -244,6 +244,7 @@ module GFS_typedefs
     real (kind=kind_phys), pointer :: emis_ice (:)  => null() !< surface emissivity over ice for LSM
     real (kind=kind_phys), pointer :: emis_wat (:)  => null() !< surface emissivity over water
     real (kind=kind_phys), pointer :: sfalb_lnd_bck (:) => null() !< snow-free albedo over land
+    real (kind=kind_phys), pointer :: aod_in (:,:) => null()  !< anthropogenic background input
 
 !--- In (radiation only)
     real (kind=kind_phys), pointer :: sncovr (:)   => null()  !< snow cover in fraction over land
@@ -571,6 +572,8 @@ module GFS_typedefs
     !--- instantaneous quantities for chemistry coupling
     real (kind=kind_phys), pointer :: ushfsfci(:)     => null()  !< instantaneous upward sensible heat flux (w/m**2)
     real (kind=kind_phys), pointer :: qci_conv(:,:)   => null()  !< convective cloud condesate after rainout
+    real (kind=kind_phys), pointer :: qci_conv_accum(:,:) => null()  !< accumulated cloud condesate after rainout
+    real (kind=kind_phys), pointer :: qci_conv_timeave(:,:) => null()  !< time averaged cloud condesate after rainout 
     real (kind=kind_phys), pointer :: pfi_lsan(:,:)   => null()  !< instantaneous 3D flux of ice    nonconvective precipitation (kg m-2 s-1)
     real (kind=kind_phys), pointer :: pfl_lsan(:,:)   => null()  !< instantaneous 3D flux of liquid nonconvective precipitation (kg m-2 s-1)
 
@@ -1512,6 +1515,8 @@ module GFS_typedefs
 !--- Diagnostic that needs to be carried over to the next time step (removed from diag_type)
     real (kind=kind_phys), pointer :: hpbl     (:)     => null()  !< Planetary boundary layer height
     real (kind=kind_phys), pointer :: ud_mf  (:,:)     => null()  !< updraft mass flux
+    real (kind=kind_phys), pointer :: ud_mf_accum  (:,:) => null() !< accumulated updraft mass flux
+    real (kind=kind_phys), pointer :: ud_mf_timeave  (:,:) => null() !< time averaged updraft mass flux
 
     !--- dynamical forcing variables for Grell-Freitas convection
     real (kind=kind_phys), pointer :: forcet (:,:)     => null()  !<
@@ -2066,6 +2071,7 @@ module GFS_typedefs
     allocate (Sfcprop%emis_lnd (IM))
     allocate (Sfcprop%emis_ice (IM))
     allocate (Sfcprop%emis_wat (IM))
+    allocate (Sfcprop%aod_in   (IM,1))
 
     Sfcprop%slmsk     = clear_val
     Sfcprop%oceanfrac = clear_val
@@ -2099,6 +2105,7 @@ module GFS_typedefs
     Sfcprop%emis_lnd  = clear_val
     Sfcprop%emis_ice  = clear_val
     Sfcprop%emis_wat  = clear_val
+    Sfcprop%aod_in    = clear_val
 
 !--- In (radiation only)
     allocate (Sfcprop%snoalb (IM))
@@ -2783,7 +2790,11 @@ module GFS_typedefs
 
     if (Model%imfdeepcnv == Model%imfdeepcnv_gf) then
       allocate (Coupling%qci_conv (IM,Model%levs))
+      allocate (Coupling%qci_conv_accum (IM,Model%levs))
+      allocate (Coupling%qci_conv_timeave (IM,Model%levs))
       Coupling%qci_conv   = clear_val
+      Coupling%qci_conv_accum = clear_val
+      Coupling%qci_conv_timeave = clear_val
     endif
 
   end subroutine coupling_create
@@ -5278,7 +5289,7 @@ module GFS_typedefs
     endif
 
     if(Model%ras     .or. Model%cscnv)  Model%cnvcld = .false.
-    if(Model%do_shoc .or. Model%pdfcld .or. Model%do_mynnedmf .or. Model%imfdeepcnv == Model%imfdeepcnv_gf) Model%cnvcld = .false.
+    if(Model%do_shoc .or. Model%pdfcld .or. Model%do_mynnedmf) Model%cnvcld = .false.
     if(Model%cnvcld) Model%ncnvcld3d = 1
 
 !--- get cnvwind index in phy_f2d; last entry in phy_f2d array
@@ -6254,9 +6265,13 @@ module GFS_typedefs
        allocate(Tbd%cactiv(IM))
        allocate(Tbd%cactiv_m(IM))
        allocate(Tbd%aod_gf(IM))
+       allocate(Tbd%ud_mf_accum(IM, Model%levs))
+       allocate(Tbd%ud_mf_timeave(IM, Model%levs))
        Tbd%cactiv = zero
        Tbd%cactiv_m = zero
        Tbd%aod_gf = zero
+       Tbd%ud_mf_accum = zero
+       Tbd%ud_mf_timeave = zero
     end if
 
     !--- MYNN variables:
