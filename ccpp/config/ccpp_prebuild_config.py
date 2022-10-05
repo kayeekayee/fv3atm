@@ -216,7 +216,6 @@ SCHEME_FILES = [
     # SMOKE
     'physics/physics/smoke/rrfs_smoke_wrapper.F90',
     'physics/physics/smoke/rrfs_smoke_postpbl.F90',
-    'physics/physics/smoke/rrfs_smoke_lsdep_wrapper.F90',
     # RRTMGP
     'physics/physics/rrtmgp_lw_gas_optics.F90',
     'physics/physics/rrtmgp_lw_cloud_optics.F90',
