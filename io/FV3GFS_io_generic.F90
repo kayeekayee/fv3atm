@@ -70,6 +70,7 @@ contains
     use mpi
     implicit none
 
+    type(domain2d) :: fv_domain_for_read
     type(domain2d) :: fv_domain
     integer :: layout(2)
     logical :: regional
@@ -118,7 +119,7 @@ contains
 
     call MPI_Comm_rank(fcst_mpi_comm,rank_in_fcst,ierr)
 
-    call atmosphere_domain ( fv_domain=fv_domain, layout=layout, regional=regional, nested=nested, &
+    call atmosphere_domain ( fv_domain=fv_domain, rd_domain=fv_domain_for_read, layout=layout, regional=regional, nested=nested, &
                                 moving_nest_parent=moving_nest_parent, is_moving_nest=is_moving_nest, &
                                 ngrids_atmos=ngrids_atmos, mygrid_atmos=mygrid_atmos, pelist=pelist )
 
@@ -208,10 +209,15 @@ contains
     end if
   end subroutine write_restart
 
-  subroutine read_restart(restart)
+  subroutine read_restart(restart,ignore_checksum )
     type(GFS_io_generic_type) :: restart
+    logical, intent(in), optional :: ignore_checksum
     if(restart%use_fms) then
-      call f_read_restart(restart%fms2)
+      if(present(ignore_checksum)) then
+        call f_read_restart(restart%fms2,ignore_checksum=ignore_checksum)
+      else
+        call f_read_restart(restart%fms2)
+      endif
     else
       call g_read_restart(restart%ionet)
     end if
