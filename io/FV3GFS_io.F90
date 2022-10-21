@@ -839,6 +839,7 @@ module FV3GFS_io_mod
     deallocate(gbbepx_name, gbbepx_var)
     endif if_smoke  ! RRFS_Smoke
 
+    gf_aeroic: if(Model%gf_aeroic.eq.2) then  ! for chemistry analysis used in GF aerosol-aware
     !--- open assimilated aod file
     infile=trim(indir)//'/'//trim(fn_aod)
     amiopen=open_file(aod_restart, trim(infile), 'read', domain=fv_domain, is_restart=.true., dont_add_res_to_filename=.true.)
@@ -871,12 +872,13 @@ module FV3GFS_io_mod
       do ix = 1, Atm_block%blksz(nb)
         i = Atm_block%index(nb)%ii(ix) - isc + 1
         j = Atm_block%index(nb)%jj(ix) - jsc + 1
-        Sfcprop(nb)%aod_in(ix,1)  = aod_var(i,j,1)
+        Sfcprop(nb)%aod_in(ix)  = aod_var(i,j,1)
       enddo
     enddo
 
     !--- deallocate containers and free restart container
     deallocate(aod_name, aod_var)
+    endif gf_aeroic ! chemistry analysis used in GF aerosol-aware
 
     !--- Modify/read-in additional orographic static fields for GSL drag suite
     if (Model%gwd_opt==3 .or. Model%gwd_opt==33 .or. &

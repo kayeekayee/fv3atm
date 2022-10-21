@@ -244,7 +244,7 @@ module GFS_typedefs
     real (kind=kind_phys), pointer :: emis_ice (:)  => null() !< surface emissivity over ice for LSM
     real (kind=kind_phys), pointer :: emis_wat (:)  => null() !< surface emissivity over water
     real (kind=kind_phys), pointer :: sfalb_lnd_bck (:) => null() !< snow-free albedo over land
-    real (kind=kind_phys), pointer :: aod_in (:,:) => null()  !< anthropogenic background input
+    real (kind=kind_phys), pointer :: aod_in (:) => null()  !< anthropogenic background input
 
 !--- In (radiation only)
     real (kind=kind_phys), pointer :: sncovr (:)   => null()  !< snow cover in fraction over land
@@ -1022,6 +1022,9 @@ module GFS_typedefs
     integer              :: imfshalcnv_gf       = 3 !< flag for scale- & aerosol-aware Grell-Freitas scheme (GSD)
     integer              :: imfshalcnv_ntiedtke = 4 !< flag for new Tiedtke scheme (CAPS)
     logical              :: hwrf_samfdeep           !< flag for HWRF SAMF deepcnv scheme (HWRF)
+    integer              :: gf_aeroic       !< flag determining which initial conditions to use for aerosol-aware gf
+                                            !<     1: MERRA2 climatology
+                                            !<     2: Analysis from chemistry model (user provided) 
     integer              :: imfdeepcnv      !< flag for mass-flux deep convection scheme
                                             !<     1: July 2010 version of SAS conv scheme
                                             !<           current operational version as of 2016
@@ -2071,7 +2074,7 @@ module GFS_typedefs
     allocate (Sfcprop%emis_lnd (IM))
     allocate (Sfcprop%emis_ice (IM))
     allocate (Sfcprop%emis_wat (IM))
-    allocate (Sfcprop%aod_in   (IM,1))
+    allocate (Sfcprop%aod_in   (IM))
 
     Sfcprop%slmsk     = clear_val
     Sfcprop%oceanfrac = clear_val
@@ -3163,6 +3166,9 @@ module GFS_typedefs
                                                                       !<     2: scale- & aerosol-aware mass-flux deep conv scheme (2017)
                                                                       !<     3: scale- & aerosol-aware Grell-Freitas scheme (GSD)
                                                                       !<     4: New Tiedtke scheme (CAPS)
+    integer              :: gf_aeroic      =  1                       !< flag determining which initial conditions to use for aerosol-aware gf
+                                                                      !<     1: MERRA2 climatology
+                                                                      !<     2: Analysis from chemistry model (user provided) 
     integer              :: isatmedmf      =  0                       !< flag for scale-aware TKE-based moist edmf scheme
                                                                       !<     0: initial version of satmedmf (Nov. 2018)
                                                                       !<     1: updated version of satmedmf (as of May 2019)
@@ -3475,8 +3481,8 @@ module GFS_typedefs
                                hwrf_samfdeep, hwrf_samfshal,                                &
                                h2o_phys, pdfcld, shcnvcw, redrag, hybedmf, satmedmf,        &
                                shinhong, do_ysu, dspheat, lheatstrg, lseaspray, cnvcld,     &
-                               random_clds, shal_cnv, imfshalcnv, imfdeepcnv, isatmedmf,    &
-                               do_deep, jcap,                                               &
+                               random_clds, shal_cnv, imfshalcnv, imfdeepcnv, gf_aeroic,    &
+                               isatmedmf, do_deep, jcap,                                    &
                                cs_parm, flgmin, cgwf, ccwf, cdmbgwd, sup, ctei_rm, crtrh,   &
                                dlqf, rbcr, shoc_parm, psauras, prauras, wminras,            &
                                do_sppt, do_shum, do_skeb,                                   &
@@ -4162,6 +4168,7 @@ module GFS_typedefs
     Model%shal_cnv          = shal_cnv
     Model%imfshalcnv        = imfshalcnv
     Model%imfdeepcnv        = imfdeepcnv
+    Model%gf_aeroic         = gf_aeroic
     Model%isatmedmf         = isatmedmf
     Model%do_deep           = do_deep
     Model%nmtvr             = nmtvr
@@ -5859,6 +5866,7 @@ module GFS_typedefs
       print *, ' shal_cnv          : ', Model%shal_cnv
       print *, ' imfshalcnv        : ', Model%imfshalcnv
       print *, ' imfdeepcnv        : ', Model%imfdeepcnv
+      print *, ' gf_aeroic         : ', Model%gf_aeroic
       print *, ' do_deep           : ', Model%do_deep
       print *, ' nmtvr             : ', Model%nmtvr
       print *, ' jcap              : ', Model%jcap

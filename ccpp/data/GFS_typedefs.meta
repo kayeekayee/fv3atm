@@ -758,7 +758,7 @@
   standard_name = assimilated_aod_input
   long_name = assimilated aod input
   units = none
-  dimensions = (horizontal_dimension,1)
+  dimensions = (horizontal_dimension)
   type = real
   kind = kind_phys
   active = (control_for_deep_convection_scheme == identifier_for_grell_freitas_deep_convection)
@@ -4533,6 +4533,12 @@
   units = flag
   dimensions = ()
   type = logical
+[gf_aeroic]
+  standard_name = control_for_gf_aerosol_initial_conditions
+  long_name = flag for initial conditions used in aerosol-aware GF
+  units = flag
+  dimensions = ()
+  type = integer
 [isatmedmf]
   standard_name = choice_of_scale_aware_TKE_moist_EDMF_PBL
   long_name = choice of scale-aware TKE moist EDMF PBL scheme
@@ -6542,7 +6548,7 @@
   dimensions = (horizontal_loop_extent)
   type = real
   kind = kind_phys
-  active = (control_for_deep_convection_scheme == identifier_for_grell_freitas_deep_convection)
+  active = (control_for_gf_aerosol_initial_conditions == 2)
 [imap]
   standard_name = map_of_block_column_number_to_global_i_index
   long_name = map of local index ix to global index i for this block
