@@ -234,13 +234,11 @@ module GFS_restart
       do nb = 1,nblks
         Restart%data(nb,num)%var2p => Tbd(nb)%aod_gf(:)
       enddo
-      if (Model%gf_aeroic == 2) then
-        num = num + 1
-        Restart%name2d(num) = 'aod_in'
-        do nb = 1,nblks
-          Restart%data(nb,num)%var2p => Sfcprop(nb)%aod_in(:)
-        enddo
-      endif
+      num = num + 1
+      Restart%name2d(num) = 'aod_in'
+      do nb = 1,nblks
+        Restart%data(nb,num)%var2p => Sfcprop(nb)%aod_in(:)
+      enddo
     endif
     ! NoahMP
     if (Model%lsm == Model%lsm_noahmp) then
