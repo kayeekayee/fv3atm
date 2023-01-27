@@ -3661,13 +3661,35 @@ module GFS_diagnostics
     if (Model%rrfs_sd .and. Model%ntsmoke>0) then
       idx = idx + 1
       ExtDiag(idx)%axes = 2
+      ExtDiag(idx)%name = 'aodtot'
+      ExtDiag(idx)%desc = 'total aod from aerosols'
+      ExtDiag(idx)%unit = ''
+      ExtDiag(idx)%mod_name = 'gfs_sfc'
+      allocate (ExtDiag(idx)%data(nblks))
+      do nb = 1,nblks
+        ExtDiag(idx)%data(nb)%var2 => Sfcprop(nb)%aodtot
+      enddo
+
+      idx = idx + 1
+      ExtDiag(idx)%axes = 2
       ExtDiag(idx)%name = 'emdust'
-      ExtDiag(idx)%desc = 'emission of dust for smoke'
+      ExtDiag(idx)%desc = 'emission of fine dust for smoke'
       ExtDiag(idx)%unit = 'ug m-2 s-1'
       ExtDiag(idx)%mod_name = 'gfs_sfc'
       allocate (ExtDiag(idx)%data(nblks))
       do nb = 1,nblks
         ExtDiag(idx)%data(nb)%var2 => Sfcprop(nb)%emdust
+      enddo
+
+      idx = idx + 1
+      ExtDiag(idx)%axes = 2
+      ExtDiag(idx)%name = 'emcoarsepm'
+      ExtDiag(idx)%desc = 'emission of coarse dust for smoke'
+      ExtDiag(idx)%unit = 'ug m-2 s-1'
+      ExtDiag(idx)%mod_name = 'gfs_sfc'
+      allocate (ExtDiag(idx)%data(nblks))
+      do nb = 1,nblks
+        ExtDiag(idx)%data(nb)%var2 => Sfcprop(nb)%emcoarsepm
       enddo
 
       idx = idx + 1

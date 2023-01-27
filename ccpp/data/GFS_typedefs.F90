@@ -18,6 +18,11 @@ module GFS_typedefs
 
    ! To ensure that these values match what's in the physics, array
    ! sizes are compared in the auto-generated physics caps in debug mode
+   ! from module_radiation_aerosols
+   integer, parameter :: NSPC    = 5
+   integer, parameter :: NSPC1   = NSPC + 1
+   ! To ensure that these values match what's in the physics, array
+   ! sizes are compared in the auto-generated physics caps in debug mode
    ! from aerclm_def
    integer, parameter, private :: ntrcaerm = 15
 
@@ -402,10 +407,12 @@ module GFS_typedefs
     real (kind=kind_phys), pointer :: dsnowprv   (:)    => null()  !< snow precipitation rate from previous timestep
     real (kind=kind_phys), pointer :: dgraupelprv(:)    => null()  !< graupel precipitation rate from previous timestep
 
-    !--- aerosol surface emissions for Thompson microphysics & smoke
+    !--- aerosol surface emissions for Thompson microphysics & smoke dust
+    real (kind=kind_phys), pointer :: aodtot  (:)     => null()  !< instantaneous dust emission
     real (kind=kind_phys), pointer :: emdust  (:)     => null()  !< instantaneous dust emission
     real (kind=kind_phys), pointer :: emseas  (:)     => null()  !< instantaneous sea salt emission
     real (kind=kind_phys), pointer :: emanoc  (:)     => null()  !< instantaneous anthro. oc emission
+    real (kind=kind_phys), pointer :: emcoarsepm (:)  => null()  !< instantaneous coarse pm emission
 
     !--- Smoke. These 3 arrays are hourly, so their dimension is imx24 (output is hourly)
     real (kind=kind_phys), pointer :: ebb_smoke_hr(:)    => null()  !< hourly smoke emission
@@ -1304,6 +1311,7 @@ module GFS_typedefs
     integer              :: ntia            !< tracer index for ice friendly aerosol
     integer              :: ntsmoke         !< tracer index for smoke
     integer              :: ntdust          !< tracer index for dust
+    integer              :: ntcoarsepm      !< tracer index for coarse PM
     integer              :: nchem           !< number of prognostic chemical species (vertically mixied)
     integer              :: ndvel           !< number of prognostic chemical species (which are deposited, usually =nchem)
     integer              :: ntchm           !< number of prognostic chemical tracers (advected)
@@ -1351,6 +1359,7 @@ module GFS_typedefs
     integer              :: seas_opt
     integer              :: dust_opt
     integer              :: drydep_opt
+    integer              :: coarsepm_settling
     integer              :: wetdep_ls_opt
     logical              :: do_plumerise
     integer              :: addsmoke_flag
@@ -1625,6 +1634,7 @@ module GFS_typedefs
     real (kind=kind_phys), pointer :: coszen(:)    => null()  !< mean cos of zenith angle over rad call period
     real (kind=kind_phys), pointer :: tsflw (:)    => null()  !< surface air temp during lw calculation in k
     real (kind=kind_phys), pointer :: semis (:)    => null()  !< surface lw emissivity in fraction
+    real (kind=kind_phys), pointer :: aerodp (:,:) => null()  !< aerosol optical depth from radiation
 
 !--- In/Out (???) (radiaition only)
     real (kind=kind_phys), pointer :: coszdg(:)    => null()  !< daytime mean cosz over rad call period
@@ -2464,9 +2474,11 @@ module GFS_typedefs
 
     if(Model%rrfs_sd) then
     !--- needed for smoke aerosol option
+      allocate (Sfcprop%aodtot    (IM))
       allocate (Sfcprop%emdust    (IM))
       allocate (Sfcprop%emseas    (IM))
       allocate (Sfcprop%emanoc    (IM))
+      allocate (Sfcprop%emcoarsepm   (IM))
       allocate (Sfcprop%ebb_smoke_hr (IM))
       allocate (Sfcprop%frp_hr    (IM))
       allocate (Sfcprop%frp_std_hr(IM))
@@ -2475,9 +2487,11 @@ module GFS_typedefs
       allocate (Sfcprop%fire_in   (IM,Model%fire_aux_data_levels))
 
       ! IMPORTANT: This initialization must match rrfs_sd_fill_data
+      Sfcprop%aodtot     = clear_val
       Sfcprop%emdust     = clear_val
       Sfcprop%emseas     = clear_val
       Sfcprop%emanoc     = clear_val
+      Sfcprop%emcoarsepm = clear_val
       Sfcprop%ebb_smoke_hr  = clear_val
       Sfcprop%frp_hr     = clear_val
       Sfcprop%frp_std_hr = clear_val
@@ -2795,8 +2809,8 @@ module GFS_typedefs
       allocate (Coupling%ebu_smoke (IM,Model%levs))
       allocate (Coupling%smoke_ext (IM,Model%levs))
       allocate (Coupling%dust_ext  (IM,Model%levs))
-      allocate (Coupling%chem3d    (IM,Model%levs,2))
-      allocate (Coupling%ddvel     (IM,2))
+      allocate (Coupling%chem3d    (IM,Model%levs,3))
+      allocate (Coupling%ddvel     (IM,3))
       allocate (Coupling%min_fplume(IM))
       allocate (Coupling%max_fplume(IM))
       allocate (Coupling%rrfs_hwp  (IM))
@@ -3402,6 +3416,7 @@ module GFS_typedefs
     integer :: seas_opt = 2
     integer :: dust_opt = 5
     integer :: drydep_opt  = 1
+    integer :: coarsepm_settling  = 1
     integer :: wetdep_ls_opt  = 1
     logical :: do_plumerise   = .false.
     integer :: addsmoke_flag  = 1
@@ -3550,7 +3565,7 @@ module GFS_typedefs
                                fscav_aero,                                                  &
                           !--- RRFS smoke namelist
                                dust_alpha, dust_gamma, wetdep_ls_alpha,                     &
-                               seas_opt, dust_opt, drydep_opt,                              &
+                               seas_opt, dust_opt, drydep_opt, coarsepm_settling,           &
                                wetdep_ls_opt, smoke_forecast, aero_ind_fdb, aero_dir_fdb,   &
                                rrfs_smoke_debug, do_plumerise, plumerisefire_frq,           &
                                addsmoke_flag, enh_mix, mix_chem,                            &
@@ -3765,6 +3780,7 @@ module GFS_typedefs
     Model%seas_opt          = seas_opt
     Model%dust_opt          = dust_opt
     Model%drydep_opt        = drydep_opt
+    Model%coarsepm_settling = coarsepm_settling
     Model%wetdep_ls_opt     = wetdep_ls_opt
     Model%do_plumerise      = do_plumerise
     Model%plumerisefire_frq = plumerisefire_frq
@@ -4448,6 +4464,7 @@ module GFS_typedefs
     if (Model%rrfs_sd) then
     Model%ntsmoke          = get_tracer_index(Model%tracer_names, 'smoke',      Model%me, Model%master, Model%debug)
     Model%ntdust           = get_tracer_index(Model%tracer_names, 'dust',       Model%me, Model%master, Model%debug)
+    Model%ntcoarsepm       = get_tracer_index(Model%tracer_names, 'coarsepm',   Model%me, Model%master, Model%debug)
     endif
 
 !--- initialize parameters for atmospheric chemistry tracers
@@ -5505,8 +5522,8 @@ module GFS_typedefs
     Model%ndche = NO_TRACER
 
     if (Model%rrfs_sd) then
-      Model%nchem = 2
-      Model%ndvel = 2
+      Model%nchem = 3
+      Model%ndvel = 3
     endif
 
     do n = 1, size(tracer_types)
@@ -5653,6 +5670,7 @@ module GFS_typedefs
         print *, 'seas_opt         : ',Model%seas_opt
         print *, 'dust_opt         : ',Model%dust_opt
         print *, 'drydep_opt       : ',Model%drydep_opt
+        print *, 'coarsepm_settling: ',Model%coarsepm_settling
         print *, 'wetdep_ls_opt    : ',Model%wetdep_ls_opt
         print *, 'do_plumerise     : ',Model%do_plumerise
         print *, 'plumerisefire_frq: ',Model%plumerisefire_frq
@@ -6052,6 +6070,7 @@ module GFS_typedefs
       print *, ' ntia              : ', Model%ntia
       print *, ' ntsmoke           : ', Model%ntsmoke
       print *, ' ntdust            : ', Model%ntdust
+      print *, ' ntcoarsepm        : ', Model%ntcoarsepm
       print *, ' nchem             : ', Model%nchem
       print *, ' ndvel             : ', Model%ndvel
       print *, ' ntchm             : ', Model%ntchm
@@ -6423,6 +6442,7 @@ module GFS_typedefs
     allocate (Radtend%coszen (IM))
     allocate (Radtend%tsflw  (IM))
     allocate (Radtend%semis  (IM))
+    allocate (Radtend%aerodp (IM,NSPC1))
 
     Radtend%htrsw  = clear_val
     Radtend%htrlw  = clear_val
@@ -6430,6 +6450,7 @@ module GFS_typedefs
     Radtend%coszen = clear_val
     Radtend%tsflw  = clear_val
     Radtend%semis  = clear_val
+    Radtend%aerodp = clear_val
 
 !--- In/Out (???) (radiation only)
     allocate (Radtend%coszdg (IM))

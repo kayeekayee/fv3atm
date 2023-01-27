@@ -1867,9 +1867,25 @@
   dimensions = (horizontal_loop_extent)
   type = real
   kind = kind_phys
+[aodtot]
+  standard_name = total_aod_from_aerosols
+  long_name = totol aod from aerosols
+  units = none
+  dimensions = (horizontal_loop_extent)
+  type = real
+  kind = kind_phys
+  active = (do_smoke_coupling)
 [emdust]
   standard_name = emission_of_dust_for_smoke
   long_name = emission of dust for smoke
+  units = ug m-2 s-1
+  dimensions = (horizontal_loop_extent)
+  type = real
+  kind = kind_phys
+  active = (do_smoke_coupling)
+[emcoarsepm]
+  standard_name = emission_of_coarse_pm_for_smoke
+  long_name = emission of coarse pm for smoke
   units = ug m-2 s-1
   dimensions = (horizontal_loop_extent)
   type = real
@@ -2571,7 +2587,7 @@
   standard_name = chem3d_mynn_pbl_transport
   long_name = mynn pbl transport of smoke and dust
   units = various
-  dimensions = (horizontal_loop_extent,vertical_layer_dimension,2)
+  dimensions = (horizontal_loop_extent,vertical_layer_dimension,3)
   type = real
   kind = kind_phys
   active = (do_smoke_coupling)
@@ -5449,6 +5465,12 @@
   units = index
   dimensions = ()
   type = integer
+[ntcoarsepm]
+  standard_name = index_for_coarse_pm_in_tracer_concentration_array
+  long_name = tracer index for coarse pm
+  units = index
+  dimensions = ()
+  type = integer
 [nchem]
   standard_name = number_of_chemical_species_vertically_mixed
   long_name = number of chemical vertically mixed
@@ -5613,6 +5635,13 @@
 [drydep_opt]
   standard_name = control_for_smoke_dry_deposition
   long_name = rrfs smoke dry deposition option
+  units = index
+  dimensions = ()
+  type = integer
+  active = (do_smoke_coupling)
+[coarsepm_settling]
+  standard_name = control_for_smoke_coarsepm_settling
+  long_name = rrfs smoke coarsepm settling option
   units = index
   dimensions = ()
   type = integer
@@ -7116,6 +7145,13 @@
   long_name = surface lw emissivity in fraction
   units = frac
   dimensions = (horizontal_loop_extent)
+  type = real
+  kind = kind_phys
+[aerodp]
+  standard_name = atmosphere_optical_thickness_due_to_ambient_aerosol_particles
+  long_name = vertical integrated optical depth for various aerosol species
+  units = none
+  dimensions = (horizontal_loop_extent,number_of_species_for_aerosol_optical_depth)
   type = real
   kind = kind_phys
 [swhc]
