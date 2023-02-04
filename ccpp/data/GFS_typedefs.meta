@@ -1883,14 +1883,6 @@
   type = real
   kind = kind_phys
   active = (do_smoke_coupling)
-[emcoarsepm]
-  standard_name = emission_of_coarse_pm_for_smoke
-  long_name = emission of coarse pm for smoke
-  units = ug m-2 s-1
-  dimensions = (horizontal_loop_extent)
-  type = real
-  kind = kind_phys
-  active = (do_smoke_coupling)
 [emseas]
   standard_name = emission_of_seas_for_smoke
   long_name = emission of seas for smoke

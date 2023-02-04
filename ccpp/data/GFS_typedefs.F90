@@ -412,7 +412,6 @@ module GFS_typedefs
     real (kind=kind_phys), pointer :: emdust  (:)     => null()  !< instantaneous dust emission
     real (kind=kind_phys), pointer :: emseas  (:)     => null()  !< instantaneous sea salt emission
     real (kind=kind_phys), pointer :: emanoc  (:)     => null()  !< instantaneous anthro. oc emission
-    real (kind=kind_phys), pointer :: emcoarsepm (:)  => null()  !< instantaneous coarse pm emission
 
     !--- Smoke. These 3 arrays are hourly, so their dimension is imx24 (output is hourly)
     real (kind=kind_phys), pointer :: ebb_smoke_hr(:)    => null()  !< hourly smoke emission
@@ -2478,7 +2477,6 @@ module GFS_typedefs
       allocate (Sfcprop%emdust    (IM))
       allocate (Sfcprop%emseas    (IM))
       allocate (Sfcprop%emanoc    (IM))
-      allocate (Sfcprop%emcoarsepm   (IM))
       allocate (Sfcprop%ebb_smoke_hr (IM))
       allocate (Sfcprop%frp_hr    (IM))
       allocate (Sfcprop%frp_std_hr(IM))
@@ -2491,7 +2489,6 @@ module GFS_typedefs
       Sfcprop%emdust     = clear_val
       Sfcprop%emseas     = clear_val
       Sfcprop%emanoc     = clear_val
-      Sfcprop%emcoarsepm = clear_val
       Sfcprop%ebb_smoke_hr  = clear_val
       Sfcprop%frp_hr     = clear_val
       Sfcprop%frp_std_hr = clear_val

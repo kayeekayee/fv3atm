@@ -3683,17 +3683,6 @@ module GFS_diagnostics
 
       idx = idx + 1
       ExtDiag(idx)%axes = 2
-      ExtDiag(idx)%name = 'emcoarsepm'
-      ExtDiag(idx)%desc = 'emission of coarse dust for smoke'
-      ExtDiag(idx)%unit = 'ug m-2 s-1'
-      ExtDiag(idx)%mod_name = 'gfs_sfc'
-      allocate (ExtDiag(idx)%data(nblks))
-      do nb = 1,nblks
-        ExtDiag(idx)%data(nb)%var2 => Sfcprop(nb)%emcoarsepm
-      enddo
-
-      idx = idx + 1
-      ExtDiag(idx)%axes = 2
       ExtDiag(idx)%name = 'emseas'
       ExtDiag(idx)%desc = 'emission of seas for smoke'
       ExtDiag(idx)%unit = 'ug m-2 s-1'
