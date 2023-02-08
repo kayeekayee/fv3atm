@@ -2587,7 +2587,7 @@
   standard_name = dry_deposition_velocity_mynn_pbl_transport
   long_name = dry deposition velocity by mynn pbl transport
   units = m s-1
-  dimensions = (horizontal_loop_extent,2)
+  dimensions = (horizontal_loop_extent,3)
   type = real
   kind = kind_phys
   active = (do_smoke_coupling)
