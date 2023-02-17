@@ -99,10 +99,7 @@ module GFS_restart
 
     ! GF
     if (Model%imfdeepcnv == Model%imfdeepcnv_gf) then
-      Restart%num2d = Restart%num2d + 3
-      if(Model%gf_aeroic == 2) then
-        Restart%num2d = Restart%num2d + 1
-      endif
+      Restart%num2d = Restart%num2d + 4
     endif
     ! CA
     if (Model%imfdeepcnv == 2 .and. Model%do_ca) then
