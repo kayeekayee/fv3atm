@@ -26,9 +26,11 @@
 !
 !---------------------------------------------------------------------------------
 !
-      use mpi
+      use mpi_f08
       use esmf
+      use fms_mod, only : uppercase
       use fms
+      use mpp_mod, only : mpp_init, mpp_error
 
       use write_internal_state
       use module_fv3_io_def,   only : num_pes_fcst,                             &
@@ -65,7 +67,7 @@
       integer,save      :: itasks, jtasks                                 !<-- # of write tasks in i/j direction in the current group
       integer,save      :: ngrids
 
-      integer,save      :: wrt_mpi_comm                                   !<-- the mpi communicator in the write comp
+      type(MPI_Comm),save :: wrt_mpi_comm                                 !<-- the mpi communicator in the write comp
       integer,save      :: idate(7), start_time(7)
       logical,save      :: write_nsflip
       logical,save      :: change_wrtidate=.false.
@@ -157,7 +159,7 @@
       integer,dimension(2,6)                  :: decomptile
       integer,dimension(2)                    :: regDecomp !define delayout for the nest grid
       integer                                 :: fieldCount
-      integer                                 :: vm_mpi_comm
+      type(MPI_Comm)                          :: vm_mpi_comm
       character(40)                           :: fieldName
       type(ESMF_Config)                       :: cf, cf_output_grid
       type(ESMF_Info)                         :: info
@@ -240,7 +242,7 @@
 !
       call ESMF_VMGetCurrent(vm=VM,rc=RC)
       call ESMF_VMGet(vm=VM, localPet=wrt_int_state%mype,               &
-                      petCount=wrt_int_state%petcount,mpiCommunicator=vm_mpi_comm,rc=rc)
+                      petCount=wrt_int_state%petcount,mpiCommunicator=vm_mpi_comm%mpi_val,rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
 
       call mpi_comm_dup(vm_mpi_comm, wrt_mpi_comm, rc)
@@ -251,7 +253,7 @@
       last_write_task = ntasks -1
       lprnt = lead_write_task == wrt_int_state%mype
 
-      call fms_init(wrt_mpi_comm)
+      call fms_init(wrt_mpi_comm%mpi_val)
 
 !      print *,'in wrt, lead_write_task=', &
 !         lead_write_task,'last_write_task=',last_write_task, &
@@ -382,6 +384,12 @@
         call ESMF_ConfigGetAttribute(config=cf_output_grid, value=output_grid(n), label ='output_grid:',rc=rc)
         if (lprnt) then
           print *,'grid_id= ', n, ' output_grid= ', trim(output_grid(n))
+        end if
+
+        if (trim(output_grid(n)) == 'cubed_sphere_grid' .and. wrt_int_state%write_dopost) then
+          write(0,*) 'wrt_initialize_p1: Inline post is not supported with cubed_sphere_grid outputs'
+          call ESMF_LogWrite("wrt_initialize_p1: Inline post is not supported with cubed_sphere_grid output",ESMF_LOGMSG_ERROR,rc=RC)
+          call ESMF_Finalize(endflag=ESMF_END_ABORT)
         end if
 
         call ESMF_ConfigGetAttribute(config=CF, value=itasks,default=1,label ='itasks:',rc=rc)
@@ -3363,6 +3371,7 @@
 
     integer                          :: localPet, petCount, i, j, k, ind
     type(ESMF_Grid)                  :: grid
+    real(ESMF_KIND_I4), allocatable  :: valueListi4(:)
     real(ESMF_KIND_R4), allocatable  :: valueListr4(:)
     real(ESMF_KIND_R8), allocatable  :: valueListr8(:)
     integer                          :: valueCount, fieldCount, udimCount
@@ -3383,7 +3392,7 @@
     logical                          :: thereAreVerticals
     integer                          :: ch_dimid, timeiso_varid
     character(len=ESMF_MAXSTR)       :: time_iso
-    integer                          :: wrt_mpi_comm
+    type(MPI_Comm)                   :: wrt_mpi_comm
     type(ESMF_VM)                    :: vm
 
     rc = ESMF_SUCCESS
@@ -3436,7 +3445,7 @@
         call ESMF_GridCompGet(comp, localPet=localPet, petCount=petCount, vm=vm, rc=rc)
         if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
 
-        call ESMF_VMGet(vm=vm, mpiCommunicator=wrt_mpi_comm, rc=rc)
+        call ESMF_VMGet(vm=vm, mpiCommunicator=wrt_mpi_comm%mpi_val, rc=rc)
         if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
 
         if (petCount > 1) then
@@ -3748,6 +3757,12 @@
                               name=trim(dimLabel), valueList=valueListr8, rc=rc)
 
         if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
+      else if ( typekind == ESMF_TYPEKIND_I4) then
+        allocate(valueListi4(valueCount))
+        call ESMF_AttributeGet(grid, convention="NetCDF", purpose="FV3", &
+                              name=trim(dimLabel), valueList=valueListi4, rc=rc)
+
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
       else
         write(0,*) 'in write_out_ungridded_dim_atts: ERROR unknown typekind'
       endif
@@ -3784,6 +3799,17 @@
         ncerr = nf90_put_var(ncid, varid, values=valueListr8)
         if (ESMF_LogFoundNetCDFError(ncerr, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__, rcToReturn=rc)) return
         deallocate(valueListr8)
+      else if(typekind == ESMF_TYPEKIND_I4) then
+        ncerr = nf90_def_var(ncid, trim(dimLabel), NF90_INT4, &
+                             dimids=(/dimid/), varid=varid)
+        if (ESMF_LogFoundNetCDFError(ncerr, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__, rcToReturn=rc)) return
+
+        ncerr = nf90_enddef(ncid=ncid)
+        if (ESMF_LogFoundNetCDFError(ncerr, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__, rcToReturn=rc)) return
+
+        ncerr = nf90_put_var(ncid, varid, values=valueListi4)
+        if (ESMF_LogFoundNetCDFError(ncerr, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__, rcToReturn=rc)) return
+        deallocate(valueListi4)
       endif
       ! add attributes to this vertical variable
       call ESMF_AttributeGet(grid, convention="NetCDF", purpose="FV3", &

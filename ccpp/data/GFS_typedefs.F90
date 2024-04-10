@@ -1,5 +1,6 @@
 module GFS_typedefs
 
+   use mpi_f08
    use machine,                  only: kind_phys, kind_dbl_prec, kind_sngl_prec
    use physcons,                 only: con_cp, con_fvirt, con_g, rholakeice,           &
                                        con_hvap, con_hfus, con_pi, con_rd, con_rv,     &
@@ -94,7 +95,7 @@ module GFS_typedefs
   type GFS_init_type
     integer :: me                                !< my MPI-rank
     integer :: master                            !< master MPI-rank
-    integer :: fcst_mpi_comm                     !< forecast tasks mpi communicator
+    type(MPI_Comm) :: fcst_mpi_comm              !< forecast tasks mpi communicator
     integer :: fcst_ntasks                       !< total number of forecast tasks
     integer :: tile_num                          !< tile number for this MPI rank
     integer :: isc                               !< starting i-index for this MPI-domain
@@ -236,6 +237,8 @@ module GFS_typedefs
     real (kind=kind_phys), pointer :: soiltype_frac(:,:) => null()  !< fractions [0:1] of soil categories
                                                               !< [tsea in gbphys.f]
     real (kind=kind_phys), pointer :: tsfco  (:)   => null()  !< sst in K
+    real (kind=kind_phys), pointer :: usfco  (:)   => null()  !< surface zonal current in m s-1
+    real (kind=kind_phys), pointer :: vsfco  (:)   => null()  !< surface meridional current in m s-1
     real (kind=kind_phys), pointer :: tsfcl  (:)   => null()  !< surface land temperature in K
     real (kind=kind_phys), pointer :: tisfc  (:)   => null()  !< surface temperature over ice fraction
     real (kind=kind_phys), pointer :: tiice(:,:)   => null()  !< internal ice temperature
@@ -698,7 +701,7 @@ module GFS_typedefs
 
     integer              :: me              !< MPI rank designator
     integer              :: master          !< MPI rank of master atmosphere processor
-    integer              :: communicator    !< MPI communicator
+    type(MPI_Comm)       :: communicator    !< MPI communicator
     integer              :: ntasks          !< MPI size in communicator
     integer              :: nthreads        !< OpenMP threads available for physics
     integer              :: nlunit          !< unit for namelist
@@ -1315,6 +1318,10 @@ module GFS_typedefs
                                             !< 0=no change
                                             !< 6=areodynamical roughness over water with input 10-m wind
                                             !< 7=slightly decrease Cd for higher wind speed compare to 6
+!--- air_sea_flux scheme
+    integer              :: icplocn2atm     !< air_sea flux options over ocean:
+                                            !< 0=no change
+                                            !< l=including ocean current in the computation of air_sea fluxes
 
 !--- potential temperature definition in surface layer physics
     logical              :: thsfc_loc       !< flag for local vs. standard potential temperature
@@ -2321,6 +2328,8 @@ module GFS_typedefs
     endif
 
     allocate (Sfcprop%tsfc     (IM))
+    allocate (Sfcprop%usfco    (IM))
+    allocate (Sfcprop%vsfco    (IM))
     allocate (Sfcprop%tsfco    (IM))
     allocate (Sfcprop%tsfcl    (IM))
     allocate (Sfcprop%tisfc    (IM))
@@ -2378,6 +2387,8 @@ module GFS_typedefs
     endif
 
     Sfcprop%tsfc      = clear_val
+    Sfcprop%usfco     = clear_val
+    Sfcprop%vsfco     = clear_val
     Sfcprop%tsfco     = clear_val
     Sfcprop%tsfcl     = clear_val
     Sfcprop%tisfc     = clear_val
@@ -3296,7 +3307,7 @@ module GFS_typedefs
     real(kind=kind_phys), dimension(:), intent(in) :: bk
     logical,                intent(in) :: restart
     logical,                intent(in) :: hydrostatic
-    integer,                intent(in) :: communicator
+    type(MPI_Comm),         intent(in) :: communicator
     integer,                intent(in) :: ntasks
     integer,                intent(in) :: nthreads
 
@@ -3306,9 +3317,7 @@ module GFS_typedefs
     integer :: seed0
     logical :: exists
     real(kind=kind_phys) :: tem
-    real(kind=kind_phys) :: rinc(5)
-    real(kind=kind_sngl_prec) :: rinc4(5)
-    real(kind=kind_dbl_prec) :: rinc8(5)
+    real(kind=kind_dbl_prec) :: rinc(5)
     real(kind=kind_phys) :: wrk(1)
     real(kind=kind_phys), parameter :: con_hr = 3600.
 
@@ -3815,6 +3824,9 @@ module GFS_typedefs
                                                              !< 6=areodynamical roughness over water with input 10-m wind
                                                              !< 7=slightly decrease Cd for higher wind speed compare to 6
                                                              !< negative when cplwav2atm=.true. - i.e. two way wave coupling
+    integer              :: icplocn2atm    = 0               !< air_sea_flux options over ocean
+                                                             !< 0=ocean current is not used in the computation of air_sea fluxes
+                                                             !< 1=including ocean current in the computation of air_sea fluxes
 
 !--- potential temperature definition in surface layer physics
     logical              :: thsfc_loc      = .true.          !< flag for local vs. standard potential temperature
@@ -3961,7 +3973,6 @@ module GFS_typedefs
 
     real(kind=kind_phys) :: radar_tten_limits(2) = (/ limit_unspecified, limit_unspecified /)
     integer :: itime
-    integer :: w3kindreal,w3kindint
 
 !--- END NAMELIST VARIABLES
 
@@ -4074,7 +4085,7 @@ module GFS_typedefs
                                frac_grid, min_lakeice, min_seaice, min_lake_height,         &
                                ignore_lake, frac_ice,                                       &
                           !--- surface layer
-                               sfc_z0_type,                                                 &
+                               sfc_z0_type, icplocn2atm,                                    &
                           !--- switch beteeen local and standard potential temperature
                                thsfc_loc,                                                   &
                           !--- switches in 2-m diagnostics
@@ -5000,6 +5011,7 @@ module GFS_typedefs
 !--- surface layer
     Model%sfc_z0_type      = sfc_z0_type
     if (Model%cplwav2atm) Model%sfc_z0_type = -1
+    Model%icplocn2atm      = icplocn2atm
 
 !--- potential temperature reference in sfc layer
     Model%thsfc_loc        = thsfc_loc
@@ -5594,19 +5606,7 @@ module GFS_typedefs
     Model%cdec             = -9999.
     Model%clstp            = -9999
     rinc(1:5)              = 0
-    call w3kind(w3kindreal,w3kindint)
-    if (w3kindreal == 8) then
-       rinc8(1:5) = 0
-       call w3difdat(jdat,idat,4,rinc8)
-       rinc = rinc8
-    else if (w3kindreal == 4) then
-       rinc4(1:5) = 0
-       call w3difdat(jdat,idat,4,rinc4)
-       rinc = rinc4
-    else
-       write(0,*)' FATAL ERROR: Invalid w3kindreal'
-       call abort
-    endif
+    call w3difdat(jdat,idat,4,rinc)
     Model%phour            = rinc(4)/con_hr
     Model%fhour            = (rinc(4) + Model%dtp)/con_hr
     Model%zhour            = mod(Model%phour,Model%fhzero)
@@ -6404,7 +6404,7 @@ module GFS_typedefs
       print *, 'basic control parameters'
       print *, ' me                : ', Model%me
       print *, ' master            : ', Model%master
-      print *, ' communicator      : ', Model%communicator
+      print *, ' communicator      : ', Model%communicator%mpi_val
       print *, ' nlunit            : ', Model%nlunit
       print *, ' fn_nml            : ', trim(Model%fn_nml)
       print *, ' fhzero            : ', Model%fhzero
@@ -6824,6 +6824,7 @@ module GFS_typedefs
       print *, ' '
       print *, 'surface layer options'
       print *, ' sfc_z0_type       : ', Model%sfc_z0_type
+      print *, ' icplocn2atm       : ', Model%icplocn2atm
       print *, ' '
       print *, 'vertical diffusion coefficients'
       print *, ' xkzm_m            : ', Model%xkzm_m
