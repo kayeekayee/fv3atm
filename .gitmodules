@@ -8,8 +8,8 @@
   branch = main
 [submodule "ccpp/physics"]
   path = ccpp/physics
-  url = https://github.com/mdtoyNOAA/ccpp-physics
-  branch = global-workflow_mod_ugwp_fd
+  url = https://github.com/NOAA-GSL/ccpp-physics-ufs
+  branch = global-workflow
 [submodule "upp"]
   path = upp
   url = https://github.com/NOAA-GSL/UPP
