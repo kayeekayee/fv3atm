@@ -4,10 +4,11 @@
 cmake_minimum_required(VERSION 3.19)
 
 # Handle user build options.
-option(ENABLE_DOCS "Enable generation of doxygen-based documentation." OFF)
+option(ENABLE_FV3ATM_DOCS "Enable generation of doxygen-based documentation." OFF)
 
 # Determine whether or not to generate documentation.
-if(ENABLE_DOCS)
+if(ENABLE_FV3ATM_DOCS)
+  message(STATUS "We will build the fv3atm doxygen documentation.")
   find_package(Doxygen REQUIRED)
   add_subdirectory(docs)
 endif()
@@ -162,6 +163,11 @@ endif()
 
 if(OPENMP)
   target_link_libraries(fv3atm PUBLIC OpenMP::OpenMP_Fortran)
+endif()
+
+if(BUILD_TESTING)
+  include(CTest)
+  add_subdirectory(tests)
 endif()
 
 ###############################################################################
