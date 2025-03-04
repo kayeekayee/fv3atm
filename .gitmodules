@@ -8,9 +8,9 @@
   branch = 2024Nov21_9e1c3ab
 [submodule "ccpp/physics"]
   path = ccpp/physics
-  url = https://github.com/kayeekayee/ccpp-physics-ufs.git
-  branch = 2025Feb03_db19a6d
+  url = https://github.com/NOAA-GSL/ccpp-physics-ufs
+  branch = global-workflow
 [submodule "upp"]
   path = upp
-  url = https://github.com/kayeekayee/upp.git
-  branch = 2024Nov21_ce5f3b1
+  url = https://github.com/NOAA-GSL/UPP
+  branch = global-workflow
